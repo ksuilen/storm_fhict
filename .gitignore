@@ -1,0 +1,52 @@
+# Python
+venv/
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# SQLite database
+*.db
+*.sqlite
+*.sqlite3
+storm_app.db
+
+# Environment variables
+.env
+.env.*
+
+# Storm output (user-generated content, typically large and not versioned directly)
+backend/storm_output/
+
+# Node / React frontend
+frontend/app/node_modules/
+frontend/app/build/
+frontend/app/.pnp.*
+frontend/app/.yarn/cache
+frontend/app/.yarn/unplugged
+frontend/app/.yarn/build-state.yml
+frontend/app/.yarn/install-state.gz
+frontend/app/npm-debug.log*
+frontend/app/yarn-debug.log*
+frontend/app/yarn-error.log*
+frontend/app/.DS_Store
