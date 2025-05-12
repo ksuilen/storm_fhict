@@ -32,15 +32,8 @@ def create_storm_run(db: Session, run: schemas.StormRunCreate, user_id: int) -> 
 def get_storm_run(db: Session, run_id: int, user_id: int) -> models.StormRun | None:
     return db.query(models.StormRun).filter(models.StormRun.id == run_id, models.StormRun.user_id == user_id).first()
 
-def get_storm_runs_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> list[models.StormRun]:
-    return (
-        db.query(models.StormRun)
-        .filter(models.StormRun.user_id == user_id)
-        .order_by(models.StormRun.start_time.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+def get_storm_runs_by_user(db: Session, user_id: int, skip: int = 0, limit: int = 20) -> list[models.StormRun]:
+    return db.query(models.StormRun).filter(models.StormRun.user_id == user_id).order_by(models.StormRun.start_time.desc()).offset(skip).limit(limit).all()
 
 def update_storm_run(
     db: Session, 
@@ -63,5 +56,14 @@ def update_storm_run(
         db.commit()
         db.refresh(db_run)
     return db_run
+
+def delete_storm_run(db: Session, run_id: int, user_id: int) -> models.StormRun | None:
+    """Deletes a StormRun record if it belongs to the user."""
+    db_run = db.query(models.StormRun).filter(models.StormRun.id == run_id, models.StormRun.user_id == user_id).first()
+    if db_run:
+        db.delete(db_run)
+        db.commit()
+        return db_run
+    return None
 
 # Voeg hier later functies toe voor het ophalen van gebruikers op ID, etc. 

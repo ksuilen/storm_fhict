@@ -16,7 +16,7 @@ class UserInDBBase(UserBase):
     is_active: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Properties to return to client
 class User(UserInDBBase):
@@ -73,7 +73,7 @@ class StormRun(StormRunBase):
     error_message: str | None = None
     user_id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StormRunJobResponse(BaseModel):
     message: str

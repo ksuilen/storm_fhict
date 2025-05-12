@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response, File, UploadFile
 from fastapi.security import (
     OAuth2PasswordBearer, 
     OAuth2PasswordRequestForm, 
@@ -13,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware # Importeer CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 import os # Nodig voor pad manipulatie
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
 import json
+import shutil # Toegevoegd voor map verwijderen
 
 from .core.config import settings
 from .database import engine, Base, get_db
@@ -143,12 +144,6 @@ def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
         # Voor nu, ga ik ervan uit dat storm_runner.run_storm direct aangeroepen kan worden
         # en dat het de nodige configuratie intern laadt.
         
-        # De aanroep naar storm_runner.run_storm moet worden aangepast
-        # om de 'output_dir_to_use' of een vergelijkbare parameter te accepteren.
-        # De huidige storm_runner.run_storm in het bestand accepteert user_id, topic, params.
-        # We moeten dit uitbreiden of de params object gebruiken.
-        # Voor nu, voeg ik het toe als een nieuwe parameter, en storm_runner.py moet worden aangepast.
-
         # Initialiseer de runner hier expliciet, omdat we niet in een HTTP request context zitten
         # waar FastAPI Depends() werkt.
         try:
@@ -159,18 +154,6 @@ def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
             print(f"Error initializing Storm Runner in background task: {runner_init_ex}")
             raise # Her-raise de exception om de run als mislukt te markeren
 
-        # Construct StormRunParameters, nu met de output directory
-        # De StormRunParameters class in storm_runner.py moet 'output_dir' accepteren
-        storm_params_dict = {
-            'do_research_online': True, 'do_generate_outline': True,
-            'do_generate_article': True, 'do_polish_article': True,
-            'do_generate_presentation': False,
-            'output_dir': absolute_output_dir_for_storm_runner # Geef het volledige pad hier mee
-        }
-        # Verwijder None waarden zodat default waarden in Pydantic model gebruikt kunnen worden
-        storm_params_dict = {k: v for k, v in storm_params_dict.items() if v is not None}
-        storm_params = actual_runner_instance.StormRunParameters(**storm_params_dict)
-        
         print(f"Calling storm_runner.run_storm with topic='{topic}', output_dir='{absolute_output_dir_for_storm_runner}' for user_id='{user_id}', run_id='{run_id}'")
 
         # De run_storm functie in storm_runner.py moet worden aangepast om params te accepteren
@@ -279,7 +262,7 @@ async def get_storm_run_status(job_id: int, db: Session = Depends(get_db), curre
     summary_content = None
     article_preview = None # Not sending full article here, just a preview or confirmation
     if db_run.status == "completed" and db_run.output_dir:
-        summary_path = get_safe_path(BASE_RESULTS_PATH, db_run.output_dir, "storm_summary.json")
+        summary_path = get_safe_path(settings.STORM_OUTPUT_DIR, db_run.output_dir, "storm_summary.json")
         if summary_path:
             try:
                 with open(summary_path, 'r', encoding='utf-8') as f: summary_content = json.load(f)
@@ -294,42 +277,153 @@ async def get_storm_run_history(skip: int = 0, limit: int = 20, db: Session = De
 async def get_storm_run_summary_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
     db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
     if not db_run or db_run.status != "completed" or not db_run.output_dir:
-        raise HTTPException(status_code=404, detail="Summary not available or run not completed/authorized")
-    file_path = get_safe_path(BASE_RESULTS_PATH, db_run.output_dir, "storm_summary.json")
-    if not file_path: raise HTTPException(status_code=404, detail="Summary file not found.")
+        raise HTTPException(status_code=404, detail="Sources not available or run not completed/authorized")
+    
+    # Pad naar de topic submap
+    topic_slug = db_run.topic.lower().replace(" ", "_")
+    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
+    url_info_filename = "url_to_info.json"
+    url_info_filepath = os.path.join(topic_subfolder_path, url_info_filename)
+    
+    # Veiligheidscheck
+    normalized_path = os.path.normpath(url_info_filepath)
+    abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
+    abs_normalized_path = os.path.abspath(normalized_path)
+    if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+         raise HTTPException(status_code=403, detail="Forbidden path")
+         
+    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
+        raise HTTPException(status_code=404, detail="url_to_info.json not found.")
+
     try:
-        with open(file_path, 'r', encoding='utf-8') as f: return json.load(f)
-    except: raise HTTPException(status_code=500, detail="Could not read summary file.")
+        with open(normalized_path, 'r', encoding='utf-8') as f:
+            url_data = json.load(f)
+        
+        # Extraheer bronnen in een bruikbaar formaat
+        sources = []
+        if "url_to_unified_index" in url_data and "url_to_info" in url_data:
+            unified_index_map = url_data["url_to_unified_index"]
+            info_map = url_data["url_to_info"]
+            # Maak een reverse map van index naar URL
+            index_to_url = {v: k for k, v in unified_index_map.items()}
+            for index in sorted(index_to_url.keys()):
+                url = index_to_url[index]
+                title = info_map.get(url, {}).get("title", "Unknown Title")
+                sources.append({"index": index, "url": url, "title": title})
+                
+        return sources # Geef de lijst met bronnen terug
+        
+    except Exception as e:
+        print(f"Error reading/parsing url_to_info.json: {e}")
+        raise HTTPException(status_code=500, detail="Could not read or parse sources file.")
+
+@app.get("/storm/results/{job_id}/outline")
+async def get_storm_run_outline_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
+    db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
+    if not db_run or db_run.status != "completed" or not db_run.output_dir:
+        raise HTTPException(status_code=404, detail="Outline not available or run not completed/authorized")
+
+    # Pad naar de topic submap
+    topic_slug = db_run.topic.lower().replace(" ", "_")
+    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
+    outline_filename = "storm_gen_outline.txt" # Primaire outline file
+    outline_filepath = os.path.join(topic_subfolder_path, outline_filename)
+
+    # Veiligheidscheck
+    normalized_path = os.path.normpath(outline_filepath)
+    abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
+    abs_normalized_path = os.path.abspath(normalized_path)
+    if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+         raise HTTPException(status_code=403, detail="Forbidden path")
+
+    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
+         # Fallback naar direct_gen_outline.txt?
+         outline_filename = "direct_gen_outline.txt"
+         outline_filepath = os.path.join(topic_subfolder_path, outline_filename)
+         normalized_path = os.path.normpath(outline_filepath)
+         if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+             raise HTTPException(status_code=403, detail="Forbidden path")
+         if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
+            raise HTTPException(status_code=404, detail="Outline file (storm_gen_outline.txt or direct_gen_outline.txt) not found.")
+
+    try:
+        with open(normalized_path, 'r', encoding='utf-8') as f:
+            outline_content = f.read()
+        # Geef platte tekst terug, frontend kan dit parsen/weergeven
+        return Response(content=outline_content, media_type="text/plain") 
+    except Exception as e:
+        print(f"Error reading outline file {normalized_path}: {e}")
+        raise HTTPException(status_code=500, detail="Could not read outline file.")
 
 @app.get("/storm/results/{job_id}/article")
 async def get_storm_run_article_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
     db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
     if not db_run or db_run.status != "completed" or not db_run.output_dir:
         raise HTTPException(status_code=404, detail="Article not available or run not completed/authorized")
-    # Attempt to find the main markdown article. 
-    # This logic assumes storm_runner.py might name it 'article.md' or '<topic_slug>_article.md' or similar.
-    # For now, just trying 'article.md'. This needs to be robust.
-    article_filename = "article.md" # TODO: Make this filename discovery more robust based on storm_runner.py
-    file_path = get_safe_path(BASE_RESULTS_PATH, db_run.output_dir, article_filename)
-    if not file_path:
-        # Fallback: Try to find any .md file if primary is not found (simple approach)
-        try:
-            # Correct pad voor os.listdir: settings.BASE_STORM_OUTPUT_DIR + db_run.output_dir
-            full_output_dir_for_list = os.path.join(BASE_RESULTS_PATH, db_run.output_dir)
-            files_in_output = os.listdir(full_output_dir_for_list)
-            md_files = [f for f in files_in_output if f.endswith('.md')]
-            if md_files:
-                # Prefer a file that might be named after the topic or a generic 'article.md'
-                # This is a basic heuristic
-                preferred_files = [f for f in md_files if 'article' in f.lower() or db_run.topic.lower().replace(" ", "_") in f.lower()]
-                if preferred_files:
-                    file_path = get_safe_path(BASE_RESULTS_PATH, db_run.output_dir, preferred_files[0])
-                else:
-                    file_path = get_safe_path(BASE_RESULTS_PATH, db_run.output_dir, md_files[0]) # Gebruik settings.BASE_STORM_OUTPUT_DIR # take the first md file found
-        except FileNotFoundError:
-            pass # output_dir itself might not exist
-    
-    if not file_path: raise HTTPException(status_code=404, detail=f"Article file ('{article_filename}' or other .md) not found.")
+
+    # Pad naar de topic submap
+    topic_slug = db_run.topic.lower().replace(" ", "_")
+    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
+
+    # Prioriteitsvolgorde voor artikelbestanden
+    possible_filenames = ["storm_gen_article_polished.txt", "storm_gen_article.txt"]
+    article_filepath = None
+    content = None
+
+    for filename in possible_filenames:
+        potential_path = os.path.join(topic_subfolder_path, filename)
+        # Veiligheidscheck
+        normalized_path = os.path.normpath(potential_path)
+        abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
+        abs_normalized_path = os.path.abspath(normalized_path)
+
+        if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+             print(f"Security alert: Attempt to access {normalized_path} outside of {abs_base_path}")
+             continue # Skip naar volgende bestandsnaam
+
+        if os.path.exists(normalized_path) and os.path.isfile(normalized_path):
+            article_filepath = normalized_path
+            break # Gevonden, stop met zoeken
+
+    if not article_filepath:
+        raise HTTPException(status_code=404, detail=f"Article file ({' or '.join(possible_filenames)}) not found in topic directory.")
+
     try:
-        with open(file_path, 'r', encoding='utf-8') as f: return Response(content=f.read(), media_type="text/markdown")
-    except: raise HTTPException(status_code=500, detail="Could not read article file.") 
+        with open(article_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        # Geef platte tekst terug (frontend gebruikt ReactMarkdown)
+        return Response(content=content, media_type="text/plain")
+    except Exception as e:
+        print(f"Error reading article file {article_filepath}: {e}")
+        raise HTTPException(status_code=500, detail="Could not read article file.")
+
+@app.delete("/storm/run/{job_id}", status_code=status.HTTP_200_OK)
+async def delete_storm_run_endpoint(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
+    # 1. Verwijder uit DB
+    db_run = crud.delete_storm_run(db=db, run_id=job_id, user_id=current_user.id)
+    if not db_run:
+        raise HTTPException(status_code=404, detail="Storm run not found or not authorized")
+
+    # 2. Verwijder output map van schijf (indien aanwezig)
+    if db_run.output_dir: # output_dir is relatief: USER_ID/RUN_ID
+        output_dir_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir)
+        # Veiligheidscheck: zorg dat we binnen de STORM_OUTPUT_DIR blijven
+        normalized_path = os.path.normpath(output_dir_path)
+        abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
+        abs_normalized_path = os.path.abspath(normalized_path)
+
+        if abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+            try:
+                if os.path.exists(normalized_path) and os.path.isdir(normalized_path):
+                    shutil.rmtree(normalized_path)
+                    print(f"Deleted output directory: {normalized_path}")
+                else:
+                    print(f"Output directory not found or not a directory, skipping deletion: {normalized_path}")
+            except Exception as e:
+                print(f"ERROR deleting output directory {normalized_path}: {e}")
+                # Ga door, de DB entry is al verwijderd. Log de error.
+        else:
+            print(f"SecurityError: Attempted to delete directory outside designated output folder: {normalized_path}")
+            # De DB entry is al verwijderd, maar log dit security issue.
+
+    return {"message": f"Storm run {job_id} deleted successfully"} 
