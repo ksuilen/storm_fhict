@@ -404,8 +404,15 @@ async def delete_storm_run_endpoint(job_id: int, db: Session = Depends(get_db), 
     if not db_run:
         raise HTTPException(status_code=404, detail="Storm run not found or not authorized")
 
+    # --- DEBUG LOG --- 
+    print(f"[Delete Run {job_id}] Retrieved db_run with output_dir: {db_run.output_dir}")
+    # --- END DEBUG LOG ---
+
     # 2. Verwijder output map van schijf (indien aanwezig)
     if db_run.output_dir: # output_dir is relatief: USER_ID/RUN_ID
+        # --- DEBUG LOG --- 
+        print(f"[Delete Run {job_id}] Entering block to delete directory based on output_dir.")
+        # --- END DEBUG LOG ---
         output_dir_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir)
         # Veiligheidscheck: zorg dat we binnen de STORM_OUTPUT_DIR blijven
         normalized_path = os.path.normpath(output_dir_path)

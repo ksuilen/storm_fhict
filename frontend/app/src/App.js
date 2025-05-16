@@ -262,7 +262,7 @@ function Dashboard() {
             console.log("Dashboard useEffect cleanup: Stopping polling.");
             stopPolling();
         };
-    }, [stopPolling, authIsLoading, user]);
+    }, [stopPolling, authIsLoading, user, fetchRunHistory]);
 
     // --- Event Handlers ---
      const handleRunSelect = (run) => {
@@ -347,24 +347,32 @@ function Dashboard() {
 
     // --- Render JSX ---
     return (
-        <div className="dashboard-container">
-            <div className="sidebar">
+        // Gebruik Bootstrap grid system voor layout naast elkaar
+        // Geef row een hoogte van 100% binnen zijn flex parent (.app-content)
+        <div className="dashboard-container row g-0 flex-grow-1"> 
+            {/* Sidebar kolom (bv. 1/3 van de breedte op medium schermen en groter) */}
+            <div className="sidebar col-md-4 col-lg-3 border-end bg-light p-3" style={{ overflowY: 'auto' }}>
                 <h2>Nieuwe Storm Run</h2>
-                 <form onSubmit={handleNewRunSubmit} className="new-run-form">
-                    <input
-                        type="text"
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="Voer onderwerp in"
-                        disabled={isSubmitting}
-                    />
-                    <button type="submit" disabled={!topic.trim() || isSubmitting}>
-                        {isSubmitting ? 'Starten...' : 'Start Run'}
+                 <form onSubmit={handleNewRunSubmit} className="new-run-form mb-4"> {/* Extra marge onder form */}
+                    <div className="mb-3">
+                        <input
+                            type="text"
+                            className="form-control" // Bootstrap class
+                            value={topic}
+                            onChange={(e) => setTopic(e.target.value)}
+                            placeholder="Voer onderwerp in"
+                            disabled={isSubmitting}
+                        />
+                    </div>
+                    <button type="submit" className="btn btn-primary w-100" disabled={!topic.trim() || isSubmitting}> {/* Bootstrap button */}
+                        {isSubmitting ? (
+                             <><span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starten...</> 
+                        ) : 'Start Run'}
                     </button>
                 </form>
                 
                 <h2>Run Geschiedenis</h2>
-                <ul className="list-group run-history mb-3"> 
+                <ul className="list-group run-history mb-3">
                     {runs.map(run => (
                         <li
                             key={run.id}
@@ -394,48 +402,79 @@ function Dashboard() {
                 </ul>
                 {runs.length === 0 && !authIsLoading && <p>Geen runs gevonden.</p>}
             </div>
-            <div className="main-content">
+            {/* Main content kolom (neemt resterende ruimte) */}
+            <div className="main-content col-md-8 col-lg-9 p-4" style={{ overflowY: 'auto' }}>
                 <h2>Taak Details & Resultaten</h2>
-                {error && <div className="error-message">Fout: {error}</div>}
+                {error && <div className="alert alert-danger">Fout: {error}</div>} {/* Bootstrap alert */}
                 {selectedRun ? (
-                    <div className="run-details">
+                    <div className="run-details"> 
                         <h3>{selectedRun.topic} (ID: {selectedRun.id})</h3>
-                        <p><strong>Status:</strong> {selectedRun.status}</p>
-                         {(selectedRun.status === 'running' || selectedRun.status === 'pending') && <div className="spinner">Taak wordt uitgevoerd...</div>}
+                        <p>
+                            <strong>Status:</strong> 
+                            <span className={`badge rounded-pill ms-2 ${getStatusBadgeClass(selectedRun.status)}`}>
+                                {selectedRun.status}
+                            </span>
+                        </p>
+                         {(selectedRun.status === 'running' || selectedRun.status === 'pending') && (
+                            <div className="d-flex align-items-center text-primary mb-3">
+                                <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                                <span>Taak wordt uitgevoerd...</span>
+                            </div>
+                         )}
 
-                         {isLoadingDetails && <div className="spinner">Details laden...</div>}
+                         {isLoadingDetails && (
+                            <div className="d-flex align-items-center text-muted mb-3">
+                                <div className="spinner-border spinner-border-sm me-2" role="status"></div>
+                                <span>Details laden...</span>
+                            </div>
+                         )}
 
-                         {/* Outline Sectie */}
-                         {selectedRun.status === 'completed' && outlineContent && (
-                             <div className="outline-section">
-                                 <h4>Inhoudsopgave</h4>
-                                 <pre className="outline-content">{outlineContent}</pre>
+                         {/* Outline, Artikel, Bronnen secties (kunnen in cards voor betere structuur) */} 
+                         {selectedRun.status === 'completed' && (
+                             <div className="card shadow-sm mb-3"> {/* Card voor Outline */}
+                                 <div className="card-header">
+                                     <h4 className="mb-0">Inhoudsopgave</h4>
+                                 </div>
+                                <div className="card-body">
+                                    <pre className="outline-content bg-light p-2 rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>{outlineContent || 'Geen inhoudsopgave beschikbaar.'}</pre>
+                                 </div>
                              </div>
                          )}
 
-                         {/* Artikel Sectie */}
-                        <h4>Gegenereerd Artikel:</h4>
-                         <div className="article-content">
-                             <ReactMarkdown>{articleContent || (selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? 'Selecteer een voltooide run om resultaten te zien.' : '')}</ReactMarkdown>
-                         </div>
-
-                         {/* Bronnen Sectie */}
-                         {selectedRun.status === 'completed' && sources.length > 0 && (
-                            <div className="sources-section">
-                                <h4>Bronnen</h4>
-                                <ul className="sources-list">
-                                    {sources.map(source => (
-                                        <li key={source.index}>
-                                            [{source.index}] <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a> ({source.url})
-                                        </li>
-                                    ))}
-                                </ul>
+                        <div className="card shadow-sm mb-3"> {/* Card voor Artikel */}
+                            <div className="card-header">
+                                <h4 className="mb-0">Gegenereerd Artikel</h4>
                             </div>
+                            <div className="card-body">
+                                <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                    <ReactMarkdown>{articleContent || (selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? <span className="text-muted">Selecteer een voltooide run om resultaten te zien.</span> : '')}</ReactMarkdown>
+                                </div>
+                            </div>
+                        </div>
+
+                         {selectedRun.status === 'completed' && sources.length > 0 && (
+                             <div className="card shadow-sm"> {/* Card voor Bronnen */}
+                                 <div className="card-header">
+                                     <h4 className="mb-0">Bronnen</h4>
+                                 </div>
+                                 <div className="card-body">
+                                     <ul className="sources-list list-unstyled mb-0" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                         {sources.map(source => (
+                                             <li key={source.index} className="mb-1 text-truncate">
+                                                 <span className="badge bg-secondary me-2">{source.index}</span> 
+                                                 <a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}>
+                                                     {source.title || source.url}
+                                                 </a>
+                                             </li>
+                                         ))}
+                                     </ul>
+                                 </div>
+                             </div>
                          )}
 
                     </div>
                 ) : (
-                    <p>Selecteer een run uit de geschiedenis om details te zien.</p>
+                    <p className="text-muted">Selecteer een run uit de geschiedenis om details te zien, of start een nieuwe run.</p>
                 )}
             </div>
         </div>
