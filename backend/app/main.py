@@ -138,8 +138,13 @@ def get_run_stats_per_user_by_admin(db: Session = Depends(get_db)):
     stats = crud.get_run_count_per_user(db)
     # Converteer naar UserRunStats schema
     user_run_stats_list = []
-    for user_id, email, role, run_count in stats:
-        user_run_stats_list.append(schemas.UserRunStats(user_id=user_id, email=email, role=role, run_count=run_count))
+    for stat_item in stats: # Iterate over each dictionary in the list
+        user_run_stats_list.append(schemas.UserRunStats(
+            user_id=stat_item['user_id'], 
+            email=stat_item['email'], 
+            role=stat_item['role'], 
+            run_count=stat_item['run_count']
+        ))
     return user_run_stats_list
     
 # --- Storm Background Task ---
