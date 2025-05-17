@@ -37,12 +37,25 @@ function Navbar() {
                                 </Link>
                             </li>
                         )}
+                        {/* Admin dropdown, alleen zichtbaar als user admin is */} 
+                        {user && user.role === 'admin' && (
+                            <li className="nav-item dropdown">
+                                <a className="nav-link dropdown-toggle" href="javascript:void(0);" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Admin
+                                </a>
+                                <ul className="dropdown-menu" aria-labelledby="adminDropdown">
+                                    <li><Link className="dropdown-item" to="/admin/users">User Management</Link></li>
+                                    <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
+                                    {/* Voeg hier eventueel meer admin links toe */}
+                                </ul>
+                            </li>
+                        )}
                         {/* Voorbeeld link uit Bootstrap docs - kan later weg */} 
-                        <li className="nav-item">
+                        {/* <li className="nav-item">
                             <a className="nav-link" href="#">Link</a>
-                        </li>
+                        </li> */}
                         {/* Voorbeeld dropdown uit Bootstrap docs - kan later weg of aangepast */} 
-                        <li className="nav-item dropdown">
+                        {/* <li className="nav-item dropdown">
                             <a className="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 Extra Opties
                             </a>
@@ -52,14 +65,14 @@ function Navbar() {
                                 <li><hr className="dropdown-divider" /></li>
                                 <li><a className="dropdown-item" href="#">Something else here</a></li>
                             </ul>
-                        </li>
+                        </li> */}
                     </ul>
                     
                     {/* User/Auth sectie */} 
                     <ul className="navbar-nav mb-2 mb-lg-0">
                         {user ? (
                             <li className="nav-item dropdown">
-                                <a className="nav-link dropdown-toggle" href="#" id="navbarUserDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <a className="nav-link dropdown-toggle" href="javascript:void(0);" id="navbarUserDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                     {user.email}
                                 </a>
                                 <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">

@@ -9,4 +9,5 @@ python-multipart
 bcrypt==4.0.1
 openai
 youdotcom
-tavily-python 
+tavily-python
+alembic==1.13.1 

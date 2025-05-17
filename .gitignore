@@ -50,3 +50,6 @@ frontend/app/npm-debug.log*
 frontend/app/yarn-debug.log*
 frontend/app/yarn-error.log*
 frontend/app/.DS_Store
+
+# Tijdelijke scripts of configuratiebestanden
+backend/create_admin.py

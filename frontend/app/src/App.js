@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import LoginPage from './pages/LoginPage';
 import RegistrationPage from './pages/RegistrationPage';
+import UserManagementPage from './pages/admin/UserManagementPage';
+import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -23,23 +25,41 @@ const HomeRoute = () => {
     return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 };
 
+// Nieuwe AdminRoute component
+const AdminRoute = ({ children }) => {
+    const { user, isLoading } = useAuth();
+    if (isLoading) {
+        return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Authenticatie controleren...</p></div>;
+    }
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+    if (user.role !== 'admin') {
+        return <Navigate to="/dashboard" replace />; // Of naar een unauthorized pagina
+    }
+    return children;
+};
+
 // --- API Helper ---
 // (Vervang met je daadwerkelijke API service/configuratie)
 const API_BASE_URL = 'http://localhost:8000'; // Backend URL
 
 async function fetchWithAuth(url, options = {}, logoutAction = null) {
     const token = localStorage.getItem('authToken');
-    // --- DEBUG LOG --- 
     console.log("fetchWithAuth: Using token:", token ? token.substring(0, 10) + '...' : 'null or empty');
-    // --- END DEBUG LOG ---
     const headers = {
         ...options.headers,
-        'Content-Type': 'application/json',
         'Authorization': token ? `Bearer ${token}` : ''
+        // Content-Type wordt hier niet meer standaard gezet, alleen als er een body is.
     };
 
-    // Voor GET requests, verwijder Content-Type als er geen body is
-    if (options.method === 'GET' || !options.body) {
+    if (options.body && !(options.body instanceof FormData)) { // FormData zet zijn eigen Content-Type
+        headers['Content-Type'] = 'application/json';
+    }
+
+    // Voor GET requests, verwijder Content-Type als er geen body is (tenzij expliciet gezet)
+    // Dit is een beetje dubbelop met bovenstaande, maar voor de zekerheid.
+    if ((options.method === 'GET' || !options.body) && !options.headers?.['Content-Type']) {
         delete headers['Content-Type'];
     }
 
@@ -55,21 +75,36 @@ async function fetchWithAuth(url, options = {}, logoutAction = null) {
         }
         throw new Error('Unauthorized');
     }
-    if (!response.ok && response.status !== 204) { // 204 No Content is OK voor DELETE
-         const errorData = await response.json().catch(() => ({ detail: 'Failed to fetch' }));
+
+    const contentType = response.headers.get('content-type');
+    console.log(`fetchWithAuth for ${url}: Content-Type: ${contentType}, Status: ${response.status}`);
+
+    if (!response.ok && response.status !== 204) { 
+        const errorData = await response.json().catch(() => ({ detail: `Failed to fetch with status ${response.status}` }));
         console.error('API Error:', errorData);
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
     }
-    // Voor DELETE requests of andere requests die geen body teruggeven
-     if (response.status === 204 || response.headers.get('content-length') === '0') {
-        return null; // Geen content om te parsen
+
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+        return null; 
     }
-    // Voor text responses (zoals de outline)
-    if (response.headers.get('content-type')?.includes('text/plain')) {
+
+    if (contentType && (contentType.includes('text/plain') || contentType.includes('text/markdown'))) {
+        console.log(`fetchWithAuth for ${url}: Returning as text.`);
         return await response.text();
     }
     
-    return await response.json(); // Ga uit van JSON voor andere responses
+    // Default to JSON if not text/plain or text/markdown
+    console.log(`fetchWithAuth for ${url}: Attempting to parse as JSON.`);
+    try {
+        return await response.json(); 
+    } catch (e) {
+        console.error(`fetchWithAuth for ${url}: Failed to parse JSON. Content-Type was ${contentType}. Error:`, e);
+        // Probeer de body als tekst te lezen om te zien wat er misging, als debug info
+        const textBody = await response.text().catch(() => "Could not read response body as text.");
+        console.error("Response body (text fallback):", textBody.substring(0, 500)); // Log eerste 500 chars
+        throw new Error(`Failed to parse JSON from ${url}. Server responded with Content-Type: ${contentType} but body was not valid JSON. Check console for text fallback.`);
+    }
 }
 
 // Helper function for status badge styling
@@ -159,9 +194,11 @@ function Dashboard() {
                 })
             ]);
 
+            console.log("Raw sourcesData from backend /summary:", sourcesData);
+
             setArticleContent(articleData || ''); // articleData is text
             setOutlineContent(outlineData || ''); // outlineData is text
-            setSources(Array.isArray(sourcesData) ? sourcesData : []); // sourcesData is JSON array
+            setSources(sourcesData || []); // Update de sources state!
 
         } catch (err) {
             console.error("Failed to fetch run details:", err);
@@ -187,34 +224,41 @@ function Dashboard() {
                 const runIndex = prevRuns.findIndex(run => run.id === jobId);
                 if (runIndex === -1) return prevRuns; // Run niet gevonden?
                 
-                const currentRun = prevRuns[runIndex];
-                if (currentRun.status === statusData.status) {
+                const currentRunInList = prevRuns[runIndex]; // Renamed to avoid conflict
+                if (currentRunInList.status === statusData.status) {
                     return prevRuns; // Geen wijziging nodig, retourneer de oude state referentie
                 }
                 
-                // Status is veranderd, maak een nieuwe array
                 const newRuns = [...prevRuns];
-                newRuns[runIndex] = { ...currentRun, status: statusData.status };
+                newRuns[runIndex] = { ...currentRunInList, status: statusData.status };
                 return newRuns;
             });
 
-            // Update geselecteerde run details als deze geselecteerd is
+            // Handle state update for the selected run
             if (selectedRun && selectedRun.id === jobId) {
-                // Alleen updaten als de status daadwerkelijk verandert
                 if (selectedRun.status !== statusData.status) {
-                    setSelectedRun(prevSelected => ({...prevSelected, status: statusData.status}));
+                    setSelectedRun(prevSelected => ({
+                        ...prevSelected, 
+                        status: statusData.status,
+                        end_time: statusData.end_time || prevSelected.end_time, 
+                        output_dir: statusData.output_dir || prevSelected.output_dir,
+                        error_message: statusData.error_message || prevSelected.error_message
+                    }));
+
+                    // If the selected run just completed, fetch its details
+                    if (statusData.status === 'completed') {
+                        fetchRunDetails(jobId); 
+                    }
                 }
             }
 
+            // Stop polling and refresh history if run is terminal
             if (statusData.status === 'completed' || statusData.status === 'failed') {
                 console.log(`Run ${jobId} finished with status: ${statusData.status}. Stopping polling.`);
                 stopPolling();
-                // Fetch history opnieuw om eventuele eindtijd etc. te krijgen
                 fetchRunHistory();
-                // Als de nu voltooide run geselecteerd was, fetch details opnieuw
-                 if (selectedRun && selectedRun.id === jobId && statusData.status === 'completed') {
-                    fetchRunDetails(jobId); // Fetch artikel, outline, sources
-                }
+                // Note: fetchRunDetails for selected completed run is now handled above
+                // to ensure it happens after setSelectedRun and before potential re-renders from fetchRunHistory.
             }
         } catch (err) {
             console.error(`Failed to fetch status for job ${jobId}:`, err);
@@ -293,13 +337,20 @@ function Dashboard() {
         stopPolling(); // Stop polling van vorige runs
 
         try {
-            const newRunData = await fetchWithAuth('/storm/run', {
+            const newRunDataFromApi = await fetchWithAuth('/storm/run', {
                 method: 'POST',
                 body: JSON.stringify({ topic: topic })
             }, logoutAction);
-            console.log("New run initiated:", newRunData);
+            console.log("New run initiated (API response):", newRunDataFromApi);
             setTopic(''); // Clear input field
-             // Voeg nieuwe run toe aan lijst (bovenaan) en selecteer deze
+
+            // Map job_id to id for frontend consistency
+            const newRunData = {
+                ...newRunDataFromApi,
+                id: newRunDataFromApi.job_id 
+            };
+
+            // Voeg nieuwe run toe aan lijst (bovenaan) en selecteer deze
             setRuns(prevRuns => [newRunData, ...prevRuns]);
             handleRunSelect(newRunData); // Selecteer en begin met pollen
         } catch (err) {
@@ -447,7 +498,41 @@ function Dashboard() {
                             </div>
                             <div className="card-body">
                                 <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                    <ReactMarkdown>{articleContent || (selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? <span className="text-muted">Selecteer een voltooide run om resultaten te zien.</span> : '')}</ReactMarkdown>
+                                    <ReactMarkdown
+                                      components={{
+                                        p: (paragraph) => {
+                                          const { node, children, ...rest } = paragraph; // children here is an array of strings or React elements
+                                    
+                                          const newChildren = React.Children.toArray(children).flatMap((child, childIdx) => {
+                                            if (typeof child === 'string') {
+                                              const parts = [];
+                                              let lastIndex = 0;
+                                              const regex = /\[(\d+)\]/g; // Match [number]
+                                              // Use node.position to help ensure key uniqueness across paragraphs
+                                              const pKey = node && node.position ? `${node.position.start.line}-${node.position.start.column}` : `p-node-${childIdx}`;
+                                    
+                                              let match;
+                                              while ((match = regex.exec(child)) !== null) {
+                                                if (match.index > lastIndex) {
+                                                  parts.push(child.slice(lastIndex, match.index));
+                                                }
+                                                const number = match[1];
+                                                parts.push(<a key={`${pKey}-cite-${match.index}`} href={`#source-${number}`}>{`[${number}]`}</a>);
+                                                lastIndex = regex.lastIndex;
+                                              }
+                                              if (lastIndex < child.length) {
+                                                parts.push(child.slice(lastIndex));
+                                              }
+                                              return parts; // flatMap will handle array of parts
+                                            }
+                                            return child; // Return React elements (like <strong>, <em> etc.) as-is
+                                          });
+                                          return <p {...rest}>{newChildren}</p>;
+                                        }
+                                      }}
+                                    >
+                                      {articleContent || (selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? <span className="text-muted">Selecteer een voltooide run om resultaten te zien.</span> : '')}
+                                    </ReactMarkdown>
                                 </div>
                             </div>
                         </div>
@@ -460,7 +545,7 @@ function Dashboard() {
                                  <div className="card-body">
                                      <ul className="sources-list list-unstyled mb-0" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                                          {sources.map(source => (
-                                             <li key={source.index} className="mb-1 text-truncate">
+                                             <li key={source.index} id={`source-${source.index}`} className="mb-1 text-truncate">
                                                  <span className="badge bg-secondary me-2">{source.index}</span> 
                                                  <a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}>
                                                      {source.title || source.url}
@@ -497,6 +582,23 @@ function App() {
                                 <PrivateRoute>
                                     <Dashboard />
                                 </PrivateRoute>
+                            }
+                        />
+                        {/* Admin Routes */}
+                        <Route 
+                            path="/admin/users"
+                            element={
+                                <AdminRoute>
+                                    <UserManagementPage />
+                                </AdminRoute>
+                            }
+                        />
+                        <Route 
+                            path="/admin/stats"
+                            element={
+                                <AdminRoute>
+                                    <RunStatisticsPage />
+                                </AdminRoute>
                             }
                         />
                         <Route path="*" element={<Navigate to="/" replace />} />

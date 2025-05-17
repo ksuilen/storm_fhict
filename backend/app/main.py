@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response, File, UploadFile, APIRouter
 from fastapi.security import (
     OAuth2PasswordBearer, 
     OAuth2PasswordRequestForm, 
@@ -41,9 +41,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     # Voeg de security scheme toe aan de OpenAPI componenten
     # Correcte manier is via openapi_extra of direct meegeven
-    openapi_components={"securitySchemes": {"BearerAuth": bearer_auth_scheme}},
-    # Vertel Swagger UI om deze scheme te gebruiken voor de globale Authorize knop
-    security=[{"BearerAuth": []}]
+    openapi_components={"securitySchemes": {"BearerAuth": bearer_auth_scheme}}
 )
 
 # --- CORS Middleware --- 
@@ -76,32 +74,33 @@ def on_startup():
 async def read_root():
     return {"message": f"Welcome to {settings.APP_NAME}"}
 
+# --- APIRouters ---
+auth_router = APIRouter(tags=["Authentication"])
+users_router = APIRouter(prefix="/users", tags=["Users"])
+admin_router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(security.get_current_active_admin)])
+storm_router = APIRouter(prefix="/storm", tags=["Storm"])
+
 # --- User Endpoints ---
-@app.post("/users/", response_model=schemas.User)
-def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+@users_router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
+def create_new_user_registration(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    # Standaard rol voor self-registration is 'user'
+    # schemas.UserCreate erft 'role' van UserBase, die 'user' als default heeft
     return crud.create_user(db=db, user=user)
 
-# --- Beveiligd Endpoint Voorbeeld ---
-@app.get(
-    "/users/me", 
-    response_model=schemas.User,
-    # We hoeven hier niks extra's te specificeren voor security docs,
-    # de globale setting en de Depends() regelen het.
-)
+@users_router.get("/me", response_model=schemas.User)
 async def read_users_me(current_user: models.User = Depends(security.get_current_active_user)):
     """Get the current logged in user's information."""
     return current_user
 
 # --- Authentication Endpoints ---
-
-@app.post("/token", response_model=schemas.Token)
+@auth_router.post("/token", response_model=schemas.Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-    user = crud.get_user_by_email(db, email=form_data.username) # Use email as username
+    user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -109,328 +108,329 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # BELANGRIJK: Geef de role mee aan de token data
+    access_token_data = {"sub": user.email, "role": user.role}
     access_token = security.create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data=access_token_data, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-# Add other endpoints later 
+# --- Admin Endpoints ---
+@admin_router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
+def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Admin endpoint to create a new user. Role can be specified in the request body."""
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+    # De rol wordt direct uit het request (user: schemas.UserCreate) gehaald.
+    # Als niet meegegeven in request, valt het terug op de default in UserCreate ('user')
+    return crud.create_user(db=db, user=user)
 
-# Background task for running Storm
+@admin_router.get("/users/", response_model=List[schemas.User])
+def read_users_by_admin(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Admin endpoint to retrieve all users."""
+    users = crud.get_users(db, skip=skip, limit=limit)
+    return users
+
+@admin_router.get("/stats/runs_per_user", response_model=List[schemas.UserRunStats])
+def get_run_stats_per_user_by_admin(db: Session = Depends(get_db)):
+    """Admin endpoint to get run statistics per user."""
+    stats = crud.get_run_count_per_user(db)
+    # Converteer naar UserRunStats schema
+    user_run_stats_list = []
+    for user_id, email, role, run_count in stats:
+        user_run_stats_list.append(schemas.UserRunStats(user_id=user_id, email=email, role=role, run_count=run_count))
+    return user_run_stats_list
+    
+# --- Storm Background Task ---
 def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
-    # run_id is de UUID van de StormRun record, user_id is de ID van de User record.
-    crud.update_storm_run(db=db, run_id=run_id, status="running")
-    
-    # Het pad relatief aan BASE_STORM_OUTPUT_DIR, dat we opslaan in de DB.
-    # run_id is al een UUID string vanuit het model, dus str() is mogelijk niet strikt nodig,
-    # maar voor de zekerheid en consistentie.
+    crud.update_storm_run_status(db=db, run_id=run_id, status="running", user_id=user_id) # user_id voor scope
+
     user_specific_output_segment = os.path.join(str(user_id), str(run_id))
-    
-    # Het volledige absolute pad waar storm_runner zijn output moet schrijven.
-    # settings.STORM_OUTPUT_DIR is bijv. "backend/storm_output" of "./storm_output"
-    # Als het "./storm_output" is, en de app draait vanuit storm_webapp/backend, dan is dit correct.
-    # Als de app draait vanuit storm_webapp, dan moet settings.STORM_OUTPUT_DIR "backend/storm_output" zijn.
-    # We gaan ervan uit dat settings.STORM_OUTPUT_DIR correct is geconfigureerd.
     absolute_output_dir_for_storm_runner = os.path.join(settings.STORM_OUTPUT_DIR, user_specific_output_segment)
     
     try:
-        # Zorg ervoor dat de output directory bestaat
         os.makedirs(absolute_output_dir_for_storm_runner, exist_ok=True)
-        print(f"Ensured output directory exists: {absolute_output_dir_for_storm_runner}") # Logging
-
-        # Parameters voor de Storm run
-        # Let op: storm_runner is de module, niet een instance hier. We roepen de run_storm functie direct aan.
-        # We moeten de get_storm_runner dependency hier op een andere manier verkrijgen of direct initialiseren.
-        # Voor nu, ga ik ervan uit dat storm_runner.run_storm direct aangeroepen kan worden
-        # en dat het de nodige configuratie intern laadt.
         
-        # Initialiseer de runner hier expliciet, omdat we niet in een HTTP request context zitten
-        # waar FastAPI Depends() werkt.
+        actual_runner_instance = get_storm_runner()
+        if actual_runner_instance is None:
+            raise Exception("Failed to initialize Storm Runner for background task.")
+
+        actual_runner_instance.args.output_dir = absolute_output_dir_for_storm_runner
+        
+        # Main run execution
+        actual_runner_instance.run(topic=topic)
+        
+        # Post-run, make this step best-effort
         try:
-            actual_runner_instance = get_storm_runner() # settings is globaal in storm_runner.py
-            if actual_runner_instance is None:
-                raise Exception("Failed to initialize Storm Runner for background task.")
-        except Exception as runner_init_ex:
-            print(f"Error initializing Storm Runner in background task: {runner_init_ex}")
-            raise # Her-raise de exception om de run als mislukt te markeren
+            actual_runner_instance.post_run()
+        except Exception as post_run_exc:
+            import traceback
+            post_run_error_msg = str(post_run_exc)
+            post_run_tb_str = traceback.format_exc()
+            print(f"Warning: Error during post_run for run {run_id} (user {user_id}): {post_run_error_msg}\nTraceback: {post_run_tb_str}")
+            # Optionally, you could store this warning in the DB, e.g., in a new field or append to error_message
+            # For now, we just log it and proceed to mark the run as completed if run() was successful.
 
-        print(f"Calling storm_runner.run_storm with topic='{topic}', output_dir='{absolute_output_dir_for_storm_runner}' for user_id='{user_id}', run_id='{run_id}'")
-
-        # De run_storm functie in storm_runner.py moet worden aangepast om params te accepteren
-        # en de output_dir daaruit te gebruiken.
-        # Het huidige run_storm in storm_runner.py roept runner.run() aan.
-        # We moeten ervoor zorgen dat de runner instance in run_storm de output_dir gebruikt.
-        # Mogelijk is het beter om de runner instance direct te gebruiken
-        actual_runner_instance.run(
-            topic=topic,
-            # De parameters komen nu van het storm_params object
-            # Dit vereist dat de .run() methode van STORMWikiRunner ook output_dir uit zijn args haalt.
-            # STORMWikiRunner (in knowledge-storm) gebruikt self.args.output_dir.
-            # We moeten zorgen dat dit correct wordt ingesteld.
-            # De StormRunParameters (als het de Pydantic model is) zal output_dir bevatten.
-            # De constructor van STORMWikiRunner in get_storm_runner moet dit mogelijk overnemen.
-
-            # De eenvoudigste manier is om de output_dir in de runner's args te zetten
-            # voordat .run() wordt aangeroepen, als STORMWikiRunner het daaruit leest.
-            # Of de .run() methode zelf accepteert een output_dir.
-            # Uit de oude synchrone endpoint: runner.run(topic=...) en runner.args.output_dir werd gebruikt.
-            # Dus, we moeten runner.args.output_dir instellen.
-            # StormRunParameters wordt typisch gebruikt om runner.args te initialiseren.
-        )
-        actual_runner_instance.args.output_dir = absolute_output_dir_for_storm_runner # Stel expliciet in als de runner dit gebruikt
-        actual_runner_instance.run(topic=topic) # Roep .run() aan, het zou nu de juiste output_dir moeten gebruiken
-
-        # Na de run, post-processing en summary
-        actual_runner_instance.post_run()
-        run_summary = actual_runner_instance.summary() # Dit kan een dict of een string zijn
-
-        # Sla de summary op als JSON in de output directory
-        summary_filename = "storm_summary.json"
-        summary_filepath = os.path.join(absolute_output_dir_for_storm_runner, summary_filename)
-        with open(summary_filepath, 'w', encoding='utf-8') as f_summary:
-            json.dump(run_summary, f_summary, indent=4)
-        
-        # De output_dir die we in de DB opslaan is het relatieve segment
         output_dir_to_db = user_specific_output_segment
-        final_status = "completed"
-        error_msg_final = None
-        print(f"Storm run {run_id} for user {user_id} completed. Output in: {absolute_output_dir_for_storm_runner}")
+        crud.update_storm_run_on_completion(db=db, run_id=run_id, status="completed", output_dir=output_dir_to_db, user_id=user_id)
+        print(f"Storm run {run_id} for user {user_id} completed (main execution successful). Output in: {absolute_output_dir_for_storm_runner}")
 
-    except Exception as e:
+    except Exception as e: # Errors from makedirs, get_storm_runner, or actual_runner_instance.run()
         import traceback
-        print(f"ERROR during Storm run_storm_background for run_id {run_id}, user_id {user_id}: {e}")
-        traceback.print_exc()
-        output_dir_to_db = None # Geen valide output dir bij error
-        error_msg_final = str(e)
-        final_status = "failed"
-    finally:
-        crud.update_storm_run(db=db, run_id=run_id, status=final_status, 
-                              end_time=datetime.utcnow(), output_dir=output_dir_to_db,
-                              error_message=error_msg_final)
+        error_msg = str(e)
+        tb_str = traceback.format_exc()
+        print(f"Error in Storm run {run_id} for user {user_id}: {error_msg}\\nTraceback: {tb_str}")
+        crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=f"{error_msg} - See backend logs for full traceback.", user_id=user_id) # user_id voor scope
 
-# BASE_RESULTS_PATH = "." # Deze variabele is niet meer nodig als we settings.STORM_OUTPUT_DIR gebruiken.
-# Verwijder of commentarieer BASE_RESULTS_PATH
+# --- Helper functie om een topic string naar een slug te converteren ---
+def create_topic_slug(topic: str) -> str:
+    return topic.lower().replace(" ", "_").replace("/", "_") # Vervang spaties en slashes
 
-def get_safe_path(base_path: str, unsafe_path_segment: str, filename: str) -> str | None:
-    # Valideer base_path: zorg dat het een bekende, veilige root is.
-    # settings.STORM_OUTPUT_DIR is onze "veilige" root.
-    # We moeten ervoor zorgen dat base_path hier altijd mee overeenkomt of eronder valt.
-    # Echter, get_safe_path wordt nu direct aangeroepen met settings.STORM_OUTPUT_DIR als base_path.
-    
-    if not unsafe_path_segment or ".." in unsafe_path_segment or unsafe_path_segment.startswith("/"):
-        print(f"get_safe_path: Unsafe path segment detected: '{unsafe_path_segment}'")
+# --- Helper voor pad validatie ---
+def get_safe_path(base_path: str, user_id: str, run_id: str, topic_slug: str, filename: str) -> str | None:
+    # Bouw het verwachte pad op basis van de componenten
+    # Voorkom dat run_id of user_id absolute paden worden of '..' bevatten
+    if ".." in user_id or os.path.isabs(user_id) or \
+       ".." in run_id or os.path.isabs(run_id) or \
+       ".." in topic_slug or os.path.isabs(topic_slug): # Controleer topic_slug ook
         return None
-    
-    # Construeer het volledige pad
-    # base_path is bijv. "backend/storm_output"
-    # unsafe_path_segment is bijv. "USER_ID/RUN_ID"
-    # filename is bijv. "storm_summary.json"
-    # full_path wordt dan "backend/storm_output/USER_ID/RUN_ID/storm_summary.json"
-    full_path = os.path.join(base_path, unsafe_path_segment, filename)
-    
-    # Normaliseer het pad (lost ., .., etc. op)
-    normalized_path = os.path.normpath(full_path)
-    
-    # Controleer of het genormaliseerde pad nog steeds begint met de (genormaliseerde) base_path.
-    # Dit is een cruciale check tegen path traversal.
-    # os.path.abspath kan hier helpen om absolute paden te vergelijken.
-    abs_base_path = os.path.abspath(base_path)
-    abs_normalized_path = os.path.abspath(normalized_path)
 
-    if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path : # os.sep voor subdirectories
-        print(f"get_safe_path: Path traversal attempt detected. Normalized path '{abs_normalized_path}' is not under base path '{abs_base_path}'")
+    # Zorg ervoor dat de filename geen padcomponenten bevat
+    if os.path.dirname(filename): # Als filename zoiets is als "subdir/file.txt"
         return None
-        
-    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
-        print(f"get_safe_path: File does not exist or is not a file: '{normalized_path}'")
-        return None
-        
-    return normalized_path
 
-@app.post("/storm/run", response_model=schemas.StormRunJobResponse)
-async def create_storm_run_endpoint(storm_request: schemas.StormRunCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    db_storm_run = crud.create_storm_run(db=db, run=storm_request, user_id=current_user.id)
-    background_tasks.add_task(run_storm_background, db=db, run_id=db_storm_run.id, topic=storm_request.topic, user_id=current_user.id)
-    return schemas.StormRunJobResponse(message="Storm run initiated.", job_id=db_storm_run.id, topic=db_storm_run.topic, status=db_storm_run.status, start_time=db_storm_run.start_time)
-
-@app.get("/storm/status/{job_id}", response_model=schemas.StormRunStatusResponse)
-async def get_storm_run_status(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
-    if not db_run:
-        raise HTTPException(status_code=404, detail="Storm run not found or not authorized")
-    # Potentially enrich with summary/article if completed and files exist
-    summary_content = None
-    article_preview = None # Not sending full article here, just a preview or confirmation
-    if db_run.status == "completed" and db_run.output_dir:
-        summary_path = get_safe_path(settings.STORM_OUTPUT_DIR, db_run.output_dir, "storm_summary.json")
-        if summary_path:
-            try:
-                with open(summary_path, 'r', encoding='utf-8') as f: summary_content = json.load(f)
-            except: pass # Silently ignore if summary can't be read for status check
-    return schemas.StormRunStatusResponse(job_id=db_run.id, status=db_run.status, topic=db_run.topic, start_time=db_run.start_time, end_time=db_run.end_time, output_dir=db_run.output_dir, error_message=db_run.error_message, summary=summary_content, article_content=article_preview)
-
-@app.get("/storm/history", response_model=list[schemas.StormRunHistoryItem])
-async def get_storm_run_history(skip: int = 0, limit: int = 20, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    return crud.get_storm_runs_by_user(db=db, user_id=current_user.id, skip=skip, limit=limit)
-
-@app.get("/storm/results/{job_id}/summary")
-async def get_storm_run_summary_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
-    if not db_run or db_run.status != "completed" or not db_run.output_dir:
-        raise HTTPException(status_code=404, detail="Sources not available or run not completed/authorized")
+    target_path = os.path.join(base_path, user_id, run_id, topic_slug, filename)
     
-    # Pad naar de topic submap
-    topic_slug = db_run.topic.lower().replace(" ", "_")
-    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
-    url_info_filename = "url_to_info.json"
-    url_info_filepath = os.path.join(topic_subfolder_path, url_info_filename)
-    
-    # Veiligheidscheck
-    normalized_path = os.path.normpath(url_info_filepath)
-    abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
-    abs_normalized_path = os.path.abspath(normalized_path)
-    if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
-         raise HTTPException(status_code=403, detail="Forbidden path")
-         
-    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
-        raise HTTPException(status_code=404, detail="url_to_info.json not found.")
+    # Normaliseer het pad (lost bijv. './' op) en controleer of het binnen de base_path valt
+    # os.path.realpath lost symlinks op en normaliseert het pad
+    normalized_target_path = os.path.realpath(target_path)
+    normalized_base_path = os.path.realpath(base_path)
 
+    if not normalized_target_path.startswith(normalized_base_path):
+        return None # Path traversal poging
+    
+    if not os.path.exists(normalized_target_path) or not os.path.isfile(normalized_target_path):
+        return None # Bestand bestaat niet of is geen bestand
+
+    return normalized_target_path
+
+
+# --- Storm Endpoints (nu beveiligd en user-scoped) ---
+@storm_router.post("/run", response_model=schemas.StormRunJobResponse)
+async def create_storm_run_endpoint(
+    storm_request: schemas.StormRunCreate, 
+    background_tasks: BackgroundTasks, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    new_run = crud.create_storm_run(db=db, topic=storm_request.topic, user_id=current_user.id)
+    background_tasks.add_task(run_storm_background, db, new_run.id, storm_request.topic, current_user.id)
+    return {
+        "message": f"Storm run for topic '{new_run.topic}' initiated successfully.",
+        "job_id": new_run.id, 
+        "topic": new_run.topic, 
+        "status": new_run.status, 
+        "start_time": new_run.start_time
+    }
+
+@storm_router.get("/status/{job_id}", response_model=schemas.StormRunStatusResponse)
+async def get_storm_run_status(
+    job_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    if not run:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or not owned by user")
+    return {
+        "job_id": run.id, 
+        "status": run.status, 
+        "topic": run.topic,
+        "start_time": run.start_time,
+        "end_time": run.end_time,
+        "output_dir": run.output_dir,
+        "error_message": run.error_message
+    }
+
+@storm_router.get("/history", response_model=List[schemas.StormRunHistoryItem])
+async def get_storm_run_history(
+    skip: int = 0, limit: int = 20, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    runs = crud.get_storm_runs_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+    return runs
+
+@storm_router.get("/results/{job_id}/summary") # Geeft nu JSON terug, niet FileResponse
+async def get_storm_run_summary_json(
+    job_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    if not run or not run.output_dir or not run.topic:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
+
+    summary_filename = "url_to_info.json"
+    topic_slug = create_topic_slug(run.topic)
+    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, summary_filename)
+
+    if not file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{summary_filename} not found for run {job_id}")
     try:
-        with open(normalized_path, 'r', encoding='utf-8') as f:
-            url_data = json.load(f)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
         
-        # Extraheer bronnen in een bruikbaar formaat
-        sources = []
-        if "url_to_unified_index" in url_data and "url_to_info" in url_data:
-            unified_index_map = url_data["url_to_unified_index"]
-            info_map = url_data["url_to_info"]
-            # Maak een reverse map van index naar URL
-            index_to_url = {v: k for k, v in unified_index_map.items()}
-            for index in sorted(index_to_url.keys()):
-                url = index_to_url[index]
-                title = info_map.get(url, {}).get("title", "Unknown Title")
-                sources.append({"index": index, "url": url, "title": title})
+        sources_list = []
+        # Determine the correct dictionary to iterate for sources.
+        # If data["url_to_info"] exists and is a dictionary, assume it's the actual source map.
+        # Otherwise, use the top-level 'data' object (original behavior).
+        map_to_iterate = data
+        if isinstance(data.get("url_to_info"), dict):
+            map_to_iterate = data["url_to_info"]
+        
+        # Ensure map_to_iterate is a dictionary before trying to call .items()
+        if isinstance(map_to_iterate, dict):
+            for index, (url, info) in enumerate(map_to_iterate.items()):
+                title = "N/A"
+                # Ensure 'info' is a dictionary to safely call .get("title")
+                if isinstance(info, dict):
+                    title = info.get("title", "N/A")
                 
-        return sources # Geef de lijst met bronnen terug
+                sources_list.append({
+                    "index": index + 1,
+                    "title": title,
+                    "url": url  # The key of map_to_iterate is assumed to be the URL
+                })
+        elif isinstance(data, list): # Handle case where data itself is a list of sources
+            # This case might occur if url_to_info.json is an array of objects,
+            # each with 'url' and 'title'.
+            for index, item in enumerate(data):
+                if isinstance(item, dict):
+                    sources_list.append({
+                        "index": index + 1,
+                        "title": item.get("title", "N/A"),
+                        "url": item.get("url", "N/A")
+                    })
         
-    except Exception as e:
-        print(f"Error reading/parsing url_to_info.json: {e}")
-        raise HTTPException(status_code=500, detail="Could not read or parse sources file.")
+        # If sources_list is empty here and the original data was a dict, 
+        # it implies the structure was not as expected by either path.
+        # Logging data structure might be useful for further debugging if issues persist.
+        # Example: if len(sources_list) == 0 and isinstance(data, dict):
+        #    print(f"Warning: Could not parse sources from data: {data}")
 
-@app.get("/storm/results/{job_id}/outline")
-async def get_storm_run_outline_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
-    if not db_run or db_run.status != "completed" or not db_run.output_dir:
-        raise HTTPException(status_code=404, detail="Outline not available or run not completed/authorized")
+        return sources_list
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{summary_filename} not found")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error decoding {summary_filename}")
 
-    # Pad naar de topic submap
-    topic_slug = db_run.topic.lower().replace(" ", "_")
-    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
-    outline_filename = "storm_gen_outline.txt" # Primaire outline file
-    outline_filepath = os.path.join(topic_subfolder_path, outline_filename)
 
-    # Veiligheidscheck
-    normalized_path = os.path.normpath(outline_filepath)
-    abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
-    abs_normalized_path = os.path.abspath(normalized_path)
-    if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
-         raise HTTPException(status_code=403, detail="Forbidden path")
+@storm_router.get("/results/{job_id}/outline")
+async def get_storm_run_outline_file(
+    job_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    if not run or not run.output_dir or not run.topic:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
-    if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
-         # Fallback naar direct_gen_outline.txt?
-         outline_filename = "direct_gen_outline.txt"
-         outline_filepath = os.path.join(topic_subfolder_path, outline_filename)
-         normalized_path = os.path.normpath(outline_filepath)
-         if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
-             raise HTTPException(status_code=403, detail="Forbidden path")
-         if not os.path.exists(normalized_path) or not os.path.isfile(normalized_path):
-            raise HTTPException(status_code=404, detail="Outline file (storm_gen_outline.txt or direct_gen_outline.txt) not found.")
-
-    try:
-        with open(normalized_path, 'r', encoding='utf-8') as f:
-            outline_content = f.read()
-        # Geef platte tekst terug, frontend kan dit parsen/weergeven
-        return Response(content=outline_content, media_type="text/plain") 
-    except Exception as e:
-        print(f"Error reading outline file {normalized_path}: {e}")
-        raise HTTPException(status_code=500, detail="Could not read outline file.")
-
-@app.get("/storm/results/{job_id}/article")
-async def get_storm_run_article_file(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    db_run = crud.get_storm_run(db=db, run_id=job_id, user_id=current_user.id)
-    if not db_run or db_run.status != "completed" or not db_run.output_dir:
-        raise HTTPException(status_code=404, detail="Article not available or run not completed/authorized")
-
-    # Pad naar de topic submap
-    topic_slug = db_run.topic.lower().replace(" ", "_")
-    topic_subfolder_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir, topic_slug)
-
-    # Prioriteitsvolgorde voor artikelbestanden
-    possible_filenames = ["storm_gen_article_polished.txt", "storm_gen_article.txt"]
-    article_filepath = None
-    content = None
+    possible_filenames = ["storm_gen_outline.txt", "direct_gen_outline.txt"]
+    file_path_to_serve = None
+    topic_slug = create_topic_slug(run.topic)
 
     for filename in possible_filenames:
-        potential_path = os.path.join(topic_subfolder_path, filename)
-        # Veiligheidscheck
-        normalized_path = os.path.normpath(potential_path)
-        abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
-        abs_normalized_path = os.path.abspath(normalized_path)
+        file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, filename)
+        if file_path:
+            file_path_to_serve = file_path
+            break
+            
+    if not file_path_to_serve:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Outline file not found for run {job_id}")
+    
+    return Response(content=open(file_path_to_serve, 'r', encoding='utf-8').read(), media_type="text/plain")
 
-        if not abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
-             print(f"Security alert: Attempt to access {normalized_path} outside of {abs_base_path}")
-             continue # Skip naar volgende bestandsnaam
 
-        if os.path.exists(normalized_path) and os.path.isfile(normalized_path):
-            article_filepath = normalized_path
-            break # Gevonden, stop met zoeken
+@storm_router.get("/results/{job_id}/article")
+async def get_storm_run_article_file(
+    job_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    if not run or not run.output_dir or not run.topic:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
-    if not article_filepath:
-        raise HTTPException(status_code=404, detail=f"Article file ({' or '.join(possible_filenames)}) not found in topic directory.")
+    article_filename = "storm_gen_article_polished.txt"
+    topic_slug = create_topic_slug(run.topic)
+    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, article_filename)
 
-    try:
-        with open(article_filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-        # Geef platte tekst terug (frontend gebruikt ReactMarkdown)
-        return Response(content=content, media_type="text/plain")
-    except Exception as e:
-        print(f"Error reading article file {article_filepath}: {e}")
-        raise HTTPException(status_code=500, detail="Could not read article file.")
+    if not file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{article_filename} not found for run {job_id}")
+        
+    return Response(content=open(file_path, 'r', encoding='utf-8').read(), media_type="text/markdown")
 
-@app.delete("/storm/run/{job_id}", status_code=status.HTTP_200_OK)
-async def delete_storm_run_endpoint(job_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(security.get_current_active_user)):
-    # 1. Verwijder uit DB
-    db_run = crud.delete_storm_run(db=db, run_id=job_id, user_id=current_user.id)
-    if not db_run:
-        raise HTTPException(status_code=404, detail="Storm run not found or not authorized")
 
-    # --- DEBUG LOG --- 
-    print(f"[Delete Run {job_id}] Retrieved db_run with output_dir: {db_run.output_dir}")
-    # --- END DEBUG LOG ---
+@storm_router.delete("/run/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_storm_run_endpoint(
+    job_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(security.get_current_active_user)
+):
+    run_to_delete = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    if not run_to_delete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or not authorized to delete")
 
-    # 2. Verwijder output map van schijf (indien aanwezig)
-    if db_run.output_dir: # output_dir is relatief: USER_ID/RUN_ID
-        # --- DEBUG LOG --- 
-        print(f"[Delete Run {job_id}] Entering block to delete directory based on output_dir.")
-        # --- END DEBUG LOG ---
-        output_dir_path = os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir)
-        # Veiligheidscheck: zorg dat we binnen de STORM_OUTPUT_DIR blijven
-        normalized_path = os.path.normpath(output_dir_path)
-        abs_base_path = os.path.abspath(settings.STORM_OUTPUT_DIR)
-        abs_normalized_path = os.path.abspath(normalized_path)
+    # Verwijder de output directory als deze bestaat en een pad heeft
+    if run_to_delete.output_dir:
+        # run_to_delete.output_dir is user_id/run_id
+        # We moeten dit combineren met settings.STORM_OUTPUT_DIR
+        dir_to_delete = os.path.join(settings.STORM_OUTPUT_DIR, str(run_to_delete.user_id), str(run_to_delete.id))
+        # Extra veiligheidscheck: zorg dat we niet de root output dir verwijderen
+        # en dat het pad daadwerkelijk overeenkomt met wat we verwachten te verwijderen.
+        normalized_base_dir = os.path.realpath(settings.STORM_OUTPUT_DIR)
+        normalized_dir_to_delete = os.path.realpath(dir_to_delete)
 
-        if abs_normalized_path.startswith(abs_base_path + os.sep) and abs_normalized_path != abs_base_path:
+        if normalized_dir_to_delete.startswith(normalized_base_dir) and \
+           normalized_dir_to_delete != normalized_base_dir and \
+           os.path.exists(normalized_dir_to_delete):
             try:
-                if os.path.exists(normalized_path) and os.path.isdir(normalized_path):
-                    shutil.rmtree(normalized_path)
-                    print(f"Deleted output directory: {normalized_path}")
-                else:
-                    print(f"Output directory not found or not a directory, skipping deletion: {normalized_path}")
-            except Exception as e:
-                print(f"ERROR deleting output directory {normalized_path}: {e}")
-                # Ga door, de DB entry is al verwijderd. Log de error.
-        else:
-            print(f"SecurityError: Attempted to delete directory outside designated output folder: {normalized_path}")
-            # De DB entry is al verwijderd, maar log dit security issue.
+                shutil.rmtree(normalized_dir_to_delete)
+                print(f"Deleted output directory for run: {normalized_dir_to_delete}")
 
-    return {"message": f"Storm run {job_id} deleted successfully"} 
+                # Check if the parent user directory (e.g., storm_output/<user_id>/) is now empty
+                user_dir_path = os.path.dirname(normalized_dir_to_delete)
+                # Make sure user_dir_path is still within STORM_OUTPUT_DIR and not STORM_OUTPUT_DIR itself
+                if user_dir_path.startswith(normalized_base_dir) and user_dir_path != normalized_base_dir:
+                    if not os.listdir(user_dir_path): # Check if empty
+                        try:
+                            os.rmdir(user_dir_path)
+                            print(f"Deleted empty user directory: {user_dir_path}")
+                        except OSError as e:
+                            print(f"Error deleting empty user directory {user_dir_path}: {e.strerror}")
+                    else:
+                        print(f"User directory {user_dir_path} is not empty, not deleting.")
+
+            except OSError as e:
+                print(f"Error deleting directory {normalized_dir_to_delete}: {e.strerror}")
+                # Niet fatale fout, ga door met verwijderen uit DB
+        else:
+            print(f"Skipped deleting directory: {dir_to_delete} (Path issue or not found)")
+            
+    crud.delete_storm_run(db=db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Routers toevoegen aan de app ---
+# Belangrijk: de volgorde kan uitmaken als je path overlaps hebt, maar hier niet direct het geval.
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(admin_router)
+app.include_router(storm_router)
+
+# Als laatste redmiddel, voor endpoints die nergens matchen (kan helpen bij debuggen)
+# @app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+# async def catch_all(path_name: str):
+#     raise HTTPException(status_code=404, detail=f"Endpoint /{path_name} not found.") 

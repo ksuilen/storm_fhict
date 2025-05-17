@@ -11,6 +11,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    role = Column(String, default="user", nullable=False)
     storm_runs = relationship("StormRun", back_populates="owner")
 
     # Je kunt hier later relaties toevoegen, bv. naar opgeslagen Storm queries 

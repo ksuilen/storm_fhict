@@ -5,10 +5,12 @@ from datetime import datetime
 # Properties shared by models storing responses or data in DB
 class UserBase(BaseModel):
     email: EmailStr
+    role: str = "user" # Standaard rol voor nieuwe gebruikers
 
 # Properties to receive via API on user creation
 class UserCreate(UserBase):
     password: str
+    # De rol wordt geërfd van UserBase, met "user" als default
 
 # Properties stored in DB
 class UserInDBBase(UserBase):
@@ -20,6 +22,8 @@ class UserInDBBase(UserBase):
 
 # Properties to return to client
 class User(UserInDBBase):
+    # id en is_active worden geërfd van UserInDBBase
+    # email en role worden geërfd van UserBase via UserInDBBase
     pass
 
 # Additional properties stored in DB but not returned to client
@@ -33,6 +37,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: str | None = None
+    role: str | None = None # Rol toevoegen aan token data
 
 # --- Storm Schemas ---
 class StormQueryRequest(BaseModel):
@@ -95,3 +100,10 @@ class StormRunStatusResponse(BaseModel):
 
 class StormRunHistoryItem(StormRun):
     pass 
+
+# Nieuw schema voor admin statistieken
+class UserRunStats(BaseModel):
+    user_id: int
+    email: EmailStr
+    role: str
+    run_count: int 
