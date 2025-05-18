@@ -147,6 +147,29 @@ def get_run_stats_per_user_by_admin(db: Session = Depends(get_db)):
         ))
     return user_run_stats_list
     
+# --- Admin Endpoints voor System Configuration ---
+@admin_router.get("/system-configuration", response_model=schemas.SystemConfigurationResponse)
+def read_system_configuration_endpoint(db: Session = Depends(get_db)):
+    """
+    Retrieve the current system-wide LLM and API configurations.
+    If no configuration is set by an admin, it implies defaults from environment variables are used.
+    """
+    config = crud.get_system_configuration(db)
+    return schemas.SystemConfigurationResponse(config=config)
+
+
+@admin_router.put("/system-configuration", response_model=schemas.SystemConfigurationResponse)
+def update_system_configuration_endpoint(
+    config_update: schemas.SystemConfigurationUpdate, 
+    db: Session = Depends(get_db)
+):
+    """
+    Update system-wide LLM and API configurations.
+    Only provide fields that need to be updated.
+    """
+    updated_config = crud.update_system_configuration(db=db, config_update=config_update)
+    return schemas.SystemConfigurationResponse(config=updated_config)
+
 # --- Storm Background Task ---
 def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
     crud.update_storm_run_status(db=db, run_id=run_id, status="running", user_id=user_id) # user_id voor scope

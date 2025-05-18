@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import RegistrationPage from './pages/RegistrationPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import RunStatisticsPage from './pages/admin/RunStatisticsPage';
+import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -28,15 +29,22 @@ const HomeRoute = () => {
 // Nieuwe AdminRoute component
 const AdminRoute = ({ children }) => {
     const { user, isLoading } = useAuth();
+    // Voeg window.location.pathname toe aan de logs voor context
+    console.log(`AdminRoute Check: Path='${window.location.pathname}', isLoading=${isLoading}, User Loaded=${!!user}, User Role=${user?.role}`);
+
     if (isLoading) {
+        console.log(`AdminRoute Decision: Path='${window.location.pathname}', Rendering loading state.`);
         return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Authenticatie controleren...</p></div>;
     }
     if (!user) {
+        console.log(`AdminRoute Decision: Path='${window.location.pathname}', No user, redirecting to /login.`);
         return <Navigate to="/login" replace />;
     }
     if (user.role !== 'admin') {
-        return <Navigate to="/dashboard" replace />; // Of naar een unauthorized pagina
+        console.log(`AdminRoute Decision: Path='${window.location.pathname}', User role is '${user.role}', not 'admin'. Redirecting to /dashboard.`);
+        return <Navigate to="/dashboard" replace />; 
     }
+    console.log(`AdminRoute Decision: Path='${window.location.pathname}', User is admin. Rendering children.`);
     return children;
 };
 
@@ -132,6 +140,8 @@ function Dashboard() {
     const [topic, setTopic] = useState(''); // State voor nieuw run topic
     const [isSubmitting, setIsSubmitting] = useState(false); // State voor submit knop
 
+    console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
+
     const pollIntervalRef = React.useRef(null);
     const initialHistoryFetchAttempted = React.useRef(false); // Ref om initiële fetch te volgen
 
@@ -160,15 +170,29 @@ function Dashboard() {
         }
     }, [logoutAction, user, authIsLoading]);
 
-    const fetchRunDetails = useCallback(async (runId) => {
-        const currentRuns = runs; // Lees de state op het moment van uitvoeren
-        const run = currentRuns.find(r => r.id === runId);
+    const fetchRunDetails = useCallback(async (runId, latestStatusData = null) => {
+        // const currentRuns = runs; // runs kan verouderd zijn direct na een setRuns
+        // const run = currentRuns.find(r => r.id === runId);
 
-        if (!run || run.status !== 'completed') {
+        // Gebruik latestStatusData als die beschikbaar en relevant is, anders selectedRun, anders zoek in runs list.
+        let runToUse = null;
+        if (latestStatusData && latestStatusData.id === runId) {
+            runToUse = latestStatusData;
+        } else if (selectedRun && selectedRun.id === runId) {
+            runToUse = selectedRun; 
+        }
+        // Fallback naar de runs lijst als laatste redmiddel (kan verouderd zijn)
+        if (!runToUse) {
+            runToUse = runs.find(r => r.id === runId);
+        }
+
+        // We zijn alleen geïnteresseerd in het laden van details als de run voltooid is.
+        if (!runToUse || runToUse.status !== 'completed') {
+             console.log(`fetchRunDetails for ${runId}: Run status is '${runToUse?.status}', not 'completed'. Clearing details.`);
              setArticleContent('');
              setOutlineContent('');
              setSources([]);
-            return;
+             return;
         }
 
         setIsLoadingDetails(true);
@@ -211,70 +235,91 @@ function Dashboard() {
         } finally {
             setIsLoadingDetails(false);
         }
-    }, [runs, logoutAction]);
+    }, [runs, logoutAction, selectedRun]);
 
     const fetchRunStatus = useCallback(async (jobId) => {
+        // LOG AAN HET BEGIN VAN fetchRunStatus (KAN BEHOUDEN WORDEN INDIEN GEWENST, OF VERWIJDERD)
+        // console.log(`fetchRunStatus CALLED for jobId: ${jobId}. Current selectedRun in closure:`, 
+        //             selectedRun ? { id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic } : null);
+
         try {
-            console.log(`Polling status for job ${jobId}`);
+            // console.log(`Polling status for job ${jobId}`); // Kan veel logs geven
             const statusData = await fetchWithAuth(`/storm/status/${jobId}`, { method: 'GET' }, logoutAction);
-            console.log("Status data received:", statusData);
+            // console.log("Status data received:", statusData); // Kan veel logs geven
 
             // Update de specifieke run in de lijst ALLEEN als de status verandert
             setRuns(prevRuns => {
                 const runIndex = prevRuns.findIndex(run => run.id === jobId);
-                if (runIndex === -1) return prevRuns; // Run niet gevonden?
+                if (runIndex === -1) return prevRuns;
                 
-                const currentRunInList = prevRuns[runIndex]; // Renamed to avoid conflict
-                if (currentRunInList.status === statusData.status) {
-                    return prevRuns; // Geen wijziging nodig, retourneer de oude state referentie
+                const currentRunInList = prevRuns[runIndex];
+                if (currentRunInList.status === statusData.status && currentRunInList.error_message === statusData.error_message) {
+                    return prevRuns; 
                 }
                 
                 const newRuns = [...prevRuns];
-                newRuns[runIndex] = { ...currentRunInList, status: statusData.status };
+                newRuns[runIndex] = { 
+                    ...currentRunInList, 
+                    status: statusData.status,
+                    error_message: statusData.error_message // Voeg error message toe aan runs lijst update
+                };
                 return newRuns;
             });
 
-            // Handle state update for the selected run
-            if (selectedRun && selectedRun.id === jobId) {
-                if (selectedRun.status !== statusData.status) {
-                    setSelectedRun(prevSelected => ({
-                        ...prevSelected, 
-                        status: statusData.status,
-                        end_time: statusData.end_time || prevSelected.end_time, 
-                        output_dir: statusData.output_dir || prevSelected.output_dir,
-                        error_message: statusData.error_message || prevSelected.error_message
-                    }));
+            setSelectedRun(prevSelected => {
+                // console.log(`Inside setSelectedRun updater for selectedRun. jobId from poll: ${jobId}, prevSelected:`, 
+                //             prevSelected ? { id: prevSelected.id, status: prevSelected.status } : null);
 
-                    // If the selected run just completed, fetch its details
-                    if (statusData.status === 'completed') {
-                        fetchRunDetails(jobId); 
+                if (prevSelected && prevSelected.id === jobId) {
+                    if (statusData && (prevSelected.status !== statusData.status || prevSelected.error_message !== statusData.error_message)) {
+                        // console.log(`Attempting to update selectedRun (id: ${prevSelected.id}). Current status: ${prevSelected.status}, New statusData.status: ${statusData.status}`);
+                        const newState = {
+                            ...prevSelected,
+                            ...(statusData || {}),
+                            id: prevSelected.id, 
+                            topic: prevSelected.topic || (statusData?.topic || "Unknown Topic")
+                        };
+                        delete newState.job_id;
+                        // console.log(`setSelectedRun: New state for selectedRun (id: ${newState.id}):`, JSON.stringify({ id: newState.id, status: newState.status, topic: newState.topic, end_time: newState.end_time, error_message: newState.error_message }));
+                        return newState;
                     }
+                    // console.log(`SelectedRun (id: ${prevSelected.id}) status (${prevSelected.status}) is same as statusData.status (${statusData?.status}). No update needed.`);
+                    return prevSelected; 
+                }
+                return prevSelected; 
+            });
+
+            if (statusData && statusData.job_id === jobId && statusData.status === 'completed') {
+                if (selectedRun && selectedRun.id === jobId) { 
+                    // console.log(`Run ${jobId} (selected) has status 'completed'. Fetching details.`);
+                    fetchRunDetails(jobId, statusData); 
                 }
             }
 
-            // Stop polling and refresh history if run is terminal
-            if (statusData.status === 'completed' || statusData.status === 'failed') {
-                console.log(`Run ${jobId} finished with status: ${statusData.status}. Stopping polling.`);
-                stopPolling();
-                fetchRunHistory();
-                // Note: fetchRunDetails for selected completed run is now handled above
-                // to ensure it happens after setSelectedRun and before potential re-renders from fetchRunHistory.
+            // Stop polling for completed or failed/error runs
+            if (statusData.status === 'completed' || statusData.status === 'failed' || statusData.status === 'error' || statusData.status === 'cancelled') {
+                // console.log(`Run ${jobId} (from status poll) finished with status: ${statusData.status}. Attempting to stop polling.`);
+                if (pollIntervalRef.current) { 
+                     stopPolling(); 
+                }
             }
         } catch (err) {
             console.error(`Failed to fetch status for job ${jobId}:`, err);
             if (err.message !== 'Unauthorized') {
-                console.warn(`Polling error for ${jobId}: ${err.message}`);
+                // console.warn(`Polling error for ${jobId}: ${err.message}`);
             }
         }
-    }, [fetchRunHistory, selectedRun, fetchRunDetails, stopPolling, logoutAction]);
+    }, [selectedRun, fetchRunDetails, stopPolling, logoutAction]);
 
     const startPolling = useCallback((jobId) => {
-        stopPolling(); // Stop eventuele vorige polls
-        console.log(`Starting polling for job ${jobId}`);
-        // Roep direct aan, en dan elke 5 seconden
-        fetchRunStatus(jobId);
-        pollIntervalRef.current = setInterval(() => fetchRunStatus(jobId), 5000); // Poll elke 5s
-    }, [fetchRunStatus, stopPolling]); // Dependencies zijn nu hierboven gedefinieerd
+        // console.log(`Attempting to start polling for job ${jobId}. Current pollIntervalRef: ${pollIntervalRef.current}`);
+        stopPolling(); 
+        // console.log(`Starting polling for job ${jobId} after stopPolling.`);
+        fetchRunStatus(jobId); 
+        pollIntervalRef.current = setInterval(() => {
+            fetchRunStatus(jobId);
+        }, 5000); 
+    }, [fetchRunStatus, stopPolling]); 
     
     // --- Effect Hooks ---
     useEffect(() => {
@@ -598,6 +643,14 @@ function App() {
                             element={
                                 <AdminRoute>
                                     <RunStatisticsPage />
+                                </AdminRoute>
+                            }
+                        />
+                        <Route 
+                            path="/admin/system-settings"
+                            element={
+                                <AdminRoute>
+                                    <AdminSystemSettingsPage />
                                 </AdminRoute>
                             }
                         />

@@ -104,3 +104,28 @@ def get_run_count_per_user(db: Session) -> list: # Naam gecorrigeerd
     ]
 
 # Voeg hier later functies toe voor het ophalen van gebruikers op ID, etc. 
+
+# --- SystemConfiguration CRUD ---
+
+def get_system_configuration(db: Session) -> models.SystemConfiguration | None:
+    return db.query(models.SystemConfiguration).filter(models.SystemConfiguration.id == 1).first()
+
+def update_system_configuration(db: Session, config_update: schemas.SystemConfigurationUpdate) -> models.SystemConfiguration:
+    db_config = get_system_configuration(db)
+    if not db_config:
+        db_config = models.SystemConfiguration(id=1) # Maak aan als het niet bestaat
+        db.add(db_config)
+    
+    # Voor Pydantic V2: 
+    update_data = config_update.model_dump(exclude_unset=True) 
+    # Voor Pydantic V1: 
+    # update_data = config_update.dict(exclude_unset=True)
+
+    for key, value in update_data.items():
+        setattr(db_config, key, value)
+    
+    # db_config.updated_at = datetime.now(timezone.utc) # Wordt automatisch geupdate door onupdate=func.now() in model
+    
+    db.commit()
+    db.refresh(db_config)
+    return db_config 

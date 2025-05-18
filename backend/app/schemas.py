@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
-from typing import Any, Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Any, Optional, List
 from datetime import datetime
 
 # Properties shared by models storing responses or data in DB
@@ -107,3 +107,40 @@ class UserRunStats(BaseModel):
     email: EmailStr
     role: str
     run_count: int 
+
+# --- System Configuration Schemas ---
+class SystemConfigurationBase(BaseModel):
+    small_model_name: Optional[str] = None
+    large_model_name: Optional[str] = None
+    small_model_name_azure: Optional[str] = None
+    large_model_name_azure: Optional[str] = None
+    azure_api_base: Optional[str] = None
+    openai_api_base: Optional[str] = None
+    
+    # API Keys en Type (nieuw)
+    openai_api_key: Optional[str] = None # In Pydantic schema's kan het Optional zijn
+    openai_api_type: Optional[str] = Field(default=None, pattern="^(openai|azure)$") # "openai" or "azure", valideer input
+    azure_api_version: Optional[str] = None
+    
+    # Retriever Keys
+    tavily_api_key: Optional[str] = None
+
+class SystemConfigurationCreate(SystemConfigurationBase):
+    pass
+
+class SystemConfigurationUpdate(SystemConfigurationBase):
+    pass
+
+class SystemConfigurationInDB(SystemConfigurationBase):
+    id: int
+    updated_at: datetime
+    # openai_api_base is al onderdeel van SystemConfigurationBase
+
+    # Voor Pydantic V1: class Config: orm_mode = True
+    # Voor Pydantic V2 (aanbevolen indien uw Pydantic versie dit ondersteunt):
+    model_config = {"from_attributes": True}
+
+
+class SystemConfigurationResponse(BaseModel):
+    config: Optional[SystemConfigurationInDB] = None
+    # defaults_used: Optional[dict[str, str]] = None # Laten we voor nu weg, kan later toegevoegd worden 

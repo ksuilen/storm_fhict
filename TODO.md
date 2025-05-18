@@ -74,4 +74,68 @@
 
 ## Algemeen
 
-- [ ] **README.md:** Uitgebreide documentatie over setup, configuratie, draaien van de app, API endpoints, etc. 
+- [ ] **README.md:** Uitgebreide documentatie over setup, configuratie, draaien van de app, API endpoints, etc.
+
+## Dynamic Configuration via Admin UI
+
+**Goal:** Allow administrators to view and override application settings (currently from `.env`) through an admin UI. The system should gracefully fall back to `.env` values if no override is set in the UI.
+
+**Backend Changes:**
+
+1.  **Configuration Storage:**
+    *   **New Database Table:** `app_configurations` (Columns: `config_key: str (PK)`, `config_value: str`).
+    *   **Alembic Migration:** Script to create `app_configurations` table.
+
+2.  **Configuration Loading Logic (Per-Use Override Approach):**
+    *   The global `settings` object (`backend/app/core/config.py`) continues to load from `.env`/defaults (base configuration).
+    *   Services/functions needing configuration values (e.g., API keys for `STORMWikiRunner`) will be modified.
+    *   A helper function (e.g., `get_effective_setting(db: Session, key: str, default_value: Any)`) will be created:
+        *   Tries to fetch the `key` from the `app_configurations` table in the DB.
+        *   If found in DB, use that value.
+        *   If not found, use the `default_value` (which would be passed from the original `.env` loaded setting, e.g., `settings.OPENAI_API_KEY`).
+
+3.  **CRUD Operations for Configuration (`backend/app/crud.py`):**
+    *   `get_config_value(db: Session, key: str) -> models.AppConfiguration | None`
+    *   `get_all_config_values(db: Session) -> list[models.AppConfiguration]`
+    *   `upsert_config_value(db: Session, key: str, value: str | None) -> models.AppConfiguration`: Creates or updates. If `value` is `None` or empty string, consider deleting the DB entry to revert to `.env`.
+    *   `delete_config_value(db: Session, key: str) -> models.AppConfiguration | None`: Explicitly removes a DB override.
+
+4.  **API Endpoints for Admin (`backend/app/main.py` under `admin_router`):
+    *   **`GET /admin/config`**: 
+        *   Fetches all known configurable keys (defined in `Settings` Pydantic model).
+        *   For each key, indicates its current value and whether it's from DB override or `.env`/default.
+        *   Example response: `[{"key": "OPENAI_API_KEY", "value": "db_override_xxxx", "source": "database"}, {"key": "LLM_MODEL_NAME", "value": "gpt-3.5-turbo", "source": "env_file"}]`
+    *   **`PUT /admin/config`**:
+        *   Accepts a dictionary of key-value pairs: `{"OPENAI_API_KEY": "new_db_value", "OTHER_KEY": null}`.
+        *   Uses `crud.upsert_config_value`. If a value is `null` or an empty string, it calls `crud.delete_config_value` to remove the DB override, thus reverting to `.env`.
+
+**Frontend Changes:**
+
+1.  **New Admin Page (`AdminConfigPage.js`):**
+    *   Route: `/admin/configuration` (or similar).
+    *   Fetches data from `GET /admin/config`.
+    *   Displays a list/form of known configurable settings (e.g., `OPENAI_API_KEY`, `LLM_MODEL_NAME`, etc. - these should be predefined in the frontend or derived from the API response).
+    *   For each setting:
+        *   Shows its name (e.g., "OpenAI API Key").
+        *   Shows its current value (masked for secrets like API keys).
+        *   Indicates its source ("Database Override" or "Environment File / Default").
+        *   Provides an input field to set/update the database override.
+        *   Provides a button to "Clear Override" (which would send `null` or empty string for that key via `PUT /admin/config` to trigger deletion of DB override).
+    *   Submit button calls `PUT /admin/config`.
+
+2.  **Navigation:**
+    *   Link in `Navbar.js` admin dropdown to the new configuration page.
+
+**Fallback Mechanism:**
+*   When a service needs a config value (e.g., `OPENAI_API_KEY`):
+    1. Call `get_effective_setting(db, "OPENAI_API_KEY", settings.OPENAI_API_KEY)`.
+    2. The helper tries `crud.get_config_value(db, "OPENAI_API_KEY")`.
+    3. If DB returns a value, it's used.
+    4. If DB returns `None`, the provided `settings.OPENAI_API_KEY` (from `.env`) is used.
+*   This ensures UI-set values take precedence, and clearing them reverts to `.env` values.
+
+**Considerations:**
+*   **Security:** Ensure only admins can access these endpoints and that sensitive values (like API keys) are handled carefully (e.g., masked in UI displays, not overly logged).
+*   **Restart vs. Dynamic Reload:** This "per-use override" approach avoids needing an application restart for config changes to take effect for new requests/operations.
+*   **Known Configurable Keys:** The admin UI should probably operate on a predefined list of keys that are safe and meaningful to expose for runtime configuration. This list can be derived from the Pydantic `Settings` model fields.
+*   **Type Coercion:** Values from the DB will be strings. If the original setting in `config.py` is a different type (e.g., int, bool), the `get_effective_setting` helper or the consuming service might need to handle type coercion carefully. 

@@ -1,9 +1,10 @@
 import os
-from functools import lru_cache
-from typing import Optional
+from typing import Optional, Union, Any
 import traceback
 
 from .core.config import settings, RetrieverType
+from .database import get_db, SessionLocal
+from . import crud, models
 
 # Probeer Storm componenten te importeren
 try:
@@ -21,22 +22,116 @@ except ImportError as e:
     YouRM, BingSearch, BraveRM, SerperRM, DuckDuckGoSearchRM, TavilySearchRM, SearXNG, AzureAISearch = None, None, None, None, None, None, None, None
     STORM_DEPENDENCIES_AVAILABLE = False
 
-@lru_cache() # Cache de runner instance
+# Helper functie om een waarde uit admin_config te halen, anders uit settings, anders None
+def get_effective_value(
+    admin_config: Optional[models.SystemConfiguration],
+    admin_key: str,
+    settings_obj: Any, # settings object (Pydantic BaseSettings instance)
+    settings_key: str,
+    is_secret: bool = False
+) -> Optional[Union[str, bool, int]]: # Uitbreiden met andere types indien nodig
+    # print(f"DEBUG GET_EFFECTIVE_VALUE: Trying for admin_key='{admin_key}', settings_key='{settings_key}'")
+    if admin_config and hasattr(admin_config, admin_key):
+        admin_val = getattr(admin_config, admin_key)
+        # print(f"DEBUG GET_EFFECTIVE_VALUE: Found admin_key '{admin_key}'. Value: '{admin_val if not is_secret else ('******' if admin_val else 'None/Empty')}', Type: {type(admin_val)}")
+        if admin_val is not None and admin_val != '': # Lege string uit admin telt als 'niet gezet'
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: Using admin value for '{admin_key}'")
+            return admin_val
+        # else:
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: Admin value for '{admin_key}' is None or empty, falling back.")
+    # else:
+        # if not admin_config:
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: admin_config is None.")
+        # elif not hasattr(admin_config, admin_key):
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: admin_config does not have attribute '{admin_key}'. Available attributes: {dir(admin_config)}")
+    
+    # Fallback naar Pydantic settings (omgeving/default)
+    # print(f"DEBUG GET_EFFECTIVE_VALUE: Attempting fallback to Pydantic settings for '{settings_key}'")
+    if hasattr(settings_obj, settings_key):
+        settings_val = getattr(settings_obj, settings_key)
+        if is_secret and settings_val is not None and hasattr(settings_val, 'get_secret_value'):
+            secret_value = settings_val.get_secret_value()
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: Using Pydantic SecretStr for '{settings_key}'. Has value: {bool(secret_value)}")
+            return secret_value
+        elif not is_secret and settings_val is not None:
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: Using Pydantic value for '{settings_key}': '{settings_val}'")
+            return settings_val
+        # else:
+            # print(f"DEBUG GET_EFFECTIVE_VALUE: Pydantic value for '{settings_key}' is None or (if secret) not a SecretStr with value.")
+    # else:
+        # print(f"DEBUG GET_EFFECTIVE_VALUE: settings_obj does not have attribute '{settings_key}'.")
+
+    # print(f"DEBUG GET_EFFECTIVE_VALUE: No value found for admin_key='{admin_key}' / settings_key='{settings_key}'. Returning None.")
+    return None
+
+# @lru_cache() # Cache de runner instance. Verwijderd zodat admin wijzigingen direct effect hebben.
 def get_storm_runner() -> Optional[STORMWikiRunner]:
     if not STORM_DEPENDENCIES_AVAILABLE:
         print("Storm dependencies not available.")
         return None
     
-    openai_key = settings.OPENAI_API_KEY.get_secret_value() if settings.OPENAI_API_KEY else None
-    if not openai_key:
+    # --- Configuratie laden: Admin DB -> Pydantic Settings (env) -> Pydantic Defaults ---
+    db_for_config: Optional[SessionLocal] = None
+    admin_config: Optional[models.SystemConfiguration] = None # models is nodig
+    try:
+        # Een DB sessie verkrijgen binnen een gecachte, niet-request-gebonden functie is lastig.
+        # Dit is een poging, maar kan problemen geven afhankelijk van de get_db implementatie
+        # en hoe de sessie gesloten wordt. Een robuustere oplossing zou zijn om de
+        # configuratie bij het opstarten van de app te laden en door te geven, of de cache te verwijderen.
+        db_generator = get_db()
+        db_for_config = next(db_generator)
+        admin_config = crud.get_system_configuration(db_for_config)
+    except Exception as e:
+        print(f"WARNING: Could not fetch admin configuration from DB during get_storm_runner: {e}. Using environment defaults.")
+        # traceback.print_exc() # Kan nuttig zijn voor debuggen
+        admin_config = None
+    finally:
+        if db_for_config and 'db_generator' in locals(): # Zorg dat db_generator bestaat
+            try:
+                next(db_generator) # Poging om de generator af te sluiten zoals FastAPI dat doet
+            except StopIteration:
+                pass # Normaal gedrag
+            except Exception as e_close:
+                print(f"Warning: Exception while closing DB session in get_storm_runner: {e_close}")
+
+    # API Key blijft altijd uit Pydantic settings (omgeving)
+    # print(f"DEBUG STORM_RUNNER: Admin config object before get_effective_value for API key: {admin_config}")
+    # if admin_config:
+        # print(f"DEBUG STORM_RUNNER: Attributes of admin_config: {dir(admin_config)}")
+        # if hasattr(admin_config, 'openai_api_key'):
+            # print(f"DEBUG STORM_RUNNER: admin_config.openai_api_key value: '{getattr(admin_config, 'openai_api_key', 'NOT_FOUND')}'")
+        # else:
+            # print("DEBUG STORM_RUNNER: admin_config does NOT have openai_api_key attribute.")
+
+    effective_openai_api_key = get_effective_value(admin_config, 'openai_api_key', settings, 'OPENAI_API_KEY', is_secret=True)
+    # print(f"DEBUG STORM_RUNNER: effective_openai_api_key after get_effective_value: '{effective_openai_api_key if effective_openai_api_key else "None/Empty"}'")
+
+    effective_openai_api_type = get_effective_value(admin_config, 'openai_api_type', settings, 'OPENAI_API_TYPE') or 'openai'
+    if not effective_openai_api_key:
         print("ERROR: OPENAI_API_KEY not set in environment. Cannot initialize Storm LM.")
         return None
+
+    # Bepaal effectieve configuratiewaarden
+    effective_small_model_name = admin_config.small_model_name if admin_config and admin_config.small_model_name else settings.SMALL_MODEL_NAME
+    effective_large_model_name = admin_config.large_model_name if admin_config and admin_config.large_model_name else settings.LARGE_MODEL_NAME
+    effective_small_model_name_azure = admin_config.small_model_name_azure if admin_config and admin_config.small_model_name_azure else settings.SMALL_MODEL_NAME_AZURE
+    effective_large_model_name_azure = admin_config.large_model_name_azure if admin_config and admin_config.large_model_name_azure else settings.LARGE_MODEL_NAME_AZURE
+    effective_azure_api_base = admin_config.azure_api_base if admin_config and admin_config.azure_api_base else settings.AZURE_API_BASE
+    # Nieuw: effective_openai_api_base
+    effective_openai_api_base = admin_config.openai_api_base if admin_config and hasattr(admin_config, 'openai_api_base') and admin_config.openai_api_base else settings.OPENAI_API_BASE
+    # AZURE_API_VERSION blijft uit Pydantic settings (omgeving)
+    effective_azure_api_version = settings.AZURE_API_VERSION
+
+    if admin_config:
+        print("--- Loaded configuration includes Admin Settings (DB) overrides where applicable ---")
+    else:
+        print("--- Using default configuration from Pydantic settings (environment/defaults) ---")
 
     try:
         # 1. Configureer LMs
         lm_configs = STORMWikiLMConfigs()
         base_openai_kwargs = {
-            "api_key": openai_key,
+            "api_key": effective_openai_api_key,
             "temperature": 1.0,
             "top_p": 0.9,
         }
@@ -44,45 +139,48 @@ def get_storm_runner() -> Optional[STORMWikiRunner]:
         ModelClass = OpenAIModel
         model_specific_kwargs = base_openai_kwargs.copy()
 
-        if settings.OPENAI_API_TYPE == "azure":
+        if effective_openai_api_type == "azure":
             ModelClass = AzureOpenAIModel
-            if not settings.AZURE_API_BASE or not settings.AZURE_API_VERSION:
-                print("ERROR: AZURE_API_BASE and AZURE_API_VERSION must be set for Azure API type.")
+            if not effective_azure_api_base or not effective_azure_api_version:
+                print("ERROR: Effective AZURE_API_BASE and AZURE_API_VERSION must be set for Azure API type.")
                 return None
             
-            model_specific_kwargs["azure_endpoint"] = settings.AZURE_API_BASE
-            model_specific_kwargs["api_version"] = settings.AZURE_API_VERSION
+            model_specific_kwargs["azure_endpoint"] = effective_azure_api_base
+            model_specific_kwargs["api_version"] = effective_azure_api_version
 
-            gpt_35_model_name = settings.GPT_35_MODEL_NAME_AZURE if settings.GPT_35_MODEL_NAME_AZURE else "gpt-4o-mini"
-            gpt_4_model_name = settings.GPT_4_MODEL_NAME_AZURE if settings.GPT_4_MODEL_NAME_AZURE else "gpt-4o"
+            small_model_name = effective_small_model_name_azure
+            large_model_name = effective_large_model_name_azure
             
-            print(f"--- AZURE OpenAI Configuration ---")
+            print(f"--- AZURE OpenAI Configuration (Effective) ---")
             print(f"Using AzureOpenAIModel")
-            print(f"Azure Endpoint: {settings.AZURE_API_BASE}")
-            print(f"API Version: {settings.AZURE_API_VERSION}")
-            print(f"GPT-3.5 class model name (deployment): {gpt_35_model_name}")
-            print(f"GPT-4 class model name (deployment): {gpt_4_model_name}")
+            print(f"Azure Endpoint: {effective_azure_api_base}")
+            print(f"API Version: {effective_azure_api_version}")
+            print(f"Small model name (deployment): {small_model_name}")
+            print(f"Large model name (deployment): {large_model_name}")
             print(f"----------------------------------")
         else: # OpenAI
-            gpt_35_model_name = "gpt-3.5-turbo"
-            gpt_4_model_name = settings.GPT_4_MODEL_NAME if settings.GPT_4_MODEL_NAME else "gpt-4o"
-            print(f"--- OpenAI (Non-Azure) Configuration ---")
+            small_model_name = effective_small_model_name
+            large_model_name = effective_large_model_name
+            print(f"--- OpenAI (Non-Azure) Configuration (Effective) ---")
             print(f"Using OpenAIModel")
-            print(f"GPT-3.5 class model name: {gpt_35_model_name}")
-            print(f"GPT-4 class model name: {gpt_4_model_name}")
+            if effective_openai_api_base:
+                model_specific_kwargs["api_base"] = effective_openai_api_base
+                print(f"OpenAI API Base URL (Effective): {effective_openai_api_base}")
+            print(f"Small model name: {small_model_name}")
+            print(f"Large model name: {large_model_name}")
             print(f"--------------------------------------")
         
         # Modellen initialiseren
-        print(f"Initializing conv_simulator_lm with model: {gpt_35_model_name} and kwargs: {model_specific_kwargs}")
-        conv_simulator_lm = ModelClass(model=gpt_35_model_name, max_tokens=500, **model_specific_kwargs)
-        print(f"Initializing question_asker_lm with model: {gpt_35_model_name} and kwargs: {model_specific_kwargs}")
-        question_asker_lm = ModelClass(model=gpt_35_model_name, max_tokens=500, **model_specific_kwargs)
-        print(f"Initializing outline_gen_lm with model: {gpt_4_model_name} and kwargs: {model_specific_kwargs}")
-        outline_gen_lm = ModelClass(model=gpt_4_model_name, max_tokens=400, **model_specific_kwargs)
-        print(f"Initializing article_gen_lm with model: {gpt_4_model_name} and kwargs: {model_specific_kwargs}")
-        article_gen_lm = ModelClass(model=gpt_4_model_name, max_tokens=700, **model_specific_kwargs)
-        print(f"Initializing article_polish_lm with model: {gpt_4_model_name} and kwargs: {model_specific_kwargs}")
-        article_polish_lm = ModelClass(model=gpt_4_model_name, max_tokens=4000, **model_specific_kwargs)
+        print(f"Initializing conv_simulator_lm with model: {small_model_name} and kwargs: {model_specific_kwargs}")
+        conv_simulator_lm = ModelClass(model=small_model_name, max_tokens=500, **model_specific_kwargs)
+        print(f"Initializing question_asker_lm with model: {small_model_name} and kwargs: {model_specific_kwargs}")
+        question_asker_lm = ModelClass(model=small_model_name, max_tokens=500, **model_specific_kwargs)
+        print(f"Initializing outline_gen_lm with model: {large_model_name} and kwargs: {model_specific_kwargs}")
+        outline_gen_lm = ModelClass(model=large_model_name, max_tokens=400, **model_specific_kwargs)
+        print(f"Initializing article_gen_lm with model: {large_model_name} and kwargs: {model_specific_kwargs}")
+        article_gen_lm = ModelClass(model=large_model_name, max_tokens=700, **model_specific_kwargs)
+        print(f"Initializing article_polish_lm with model: {large_model_name} and kwargs: {model_specific_kwargs}")
+        article_polish_lm = ModelClass(model=large_model_name, max_tokens=4000, **model_specific_kwargs)
 
         lm_configs.set_conv_simulator_lm(conv_simulator_lm)
         lm_configs.set_question_asker_lm(question_asker_lm)
@@ -125,9 +223,20 @@ def get_storm_runner() -> Optional[STORMWikiRunner]:
             if not api_key: raise ValueError("SERPER_API_KEY not set for 'serper' retriever")
             rm = SerperRM(serper_search_api_key=api_key, query_params={"autocorrect": True, "num": 10, "page": 1})
         elif retriever_choice == "tavily":
-            api_key = settings.TAVILY_API_KEY.get_secret_value() if settings.TAVILY_API_KEY else None
-            if not api_key: raise ValueError("TAVILY_API_KEY not set for 'tavily' retriever")
-            rm = TavilySearchRM(tavily_search_api_key=api_key, k=engine_args.search_top_k, include_raw_content=True)
+            # print(f"DEBUG STORM_RUNNER: Initializing Tavily. Admin config: {admin_config is not None}")
+            # if admin_config and hasattr(admin_config, 'tavily_api_key'):
+                # print(f"DEBUG STORM_RUNNER: admin_config.tavily_api_key value before get_effective_value: '{getattr(admin_config, 'tavily_api_key', 'NOT_FOUND')}'")
+            # elif admin_config:
+                # print("DEBUG STORM_RUNNER: admin_config does NOT have tavily_api_key attribute.")
+            # else:
+                # print("DEBUG STORM_RUNNER: admin_config is None, cannot check for tavily_api_key attribute.")
+
+            effective_tavily_key = get_effective_value(admin_config, 'tavily_api_key', settings, 'TAVILY_API_KEY', is_secret=True)
+            # print(f"DEBUG STORM_RUNNER: effective_tavily_key for Tavily AFTER get_effective_value: '{effective_tavily_key if effective_tavily_key else "None/Empty"}'")
+            
+            if not effective_tavily_key: raise ValueError("TAVILY_API_KEY not set (Admin DB or Pydantic/env) for 'tavily' retriever")
+            rm = TavilySearchRM(tavily_search_api_key=effective_tavily_key, k=engine_args.search_top_k, include_raw_content=True)
+            print(f"TavilyRM initialized using effective key.") # Schonere log
         elif retriever_choice == "searxng":
             api_key = settings.SEARXNG_API_KEY.get_secret_value() if settings.SEARXNG_API_KEY else None
             if not api_key: raise ValueError("SEARXNG_API_KEY not set for 'searxng' retriever")

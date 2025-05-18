@@ -46,7 +46,8 @@ function Navbar() {
                                 <ul className="dropdown-menu" aria-labelledby="adminDropdown">
                                     <li><Link className="dropdown-item" to="/admin/users">User Management</Link></li>
                                     <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
-                                    {/* Voeg hier eventueel meer admin links toe */}
+                                    <li><hr className="dropdown-divider" /></li>
+                                    <li><Link className="dropdown-item" to="/admin/system-settings">Systeeminstellingen</Link></li>
                                 </ul>
                             </li>
                         )}
