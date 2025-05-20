@@ -48,15 +48,15 @@ app = FastAPI(
 # Voeg dit toe VOORDAT je routes definieert
 origins = [
     "http://localhost:3000", # De origin van je React frontend development server
-    # Voeg hier eventueel andere origins toe (bv. je productie frontend URL)
+    # "http://localhost:3001", # Potentiële andere dev poort
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True, # Sta credentials (zoals cookies, authorization headers) toe
-    allow_methods=["*"],    # Sta alle methodes toe (GET, POST, etc.)
-    allow_headers=["*"],    # Sta alle headers toe
+    allow_origins=origins, # TERUGGEZET naar specifieke origins
+    allow_credentials=True, 
+    allow_methods=["*"],    
+    allow_headers=["*"],    
 )
 
 # --- Startup Event --- (Beter dan direct aanroepen)
@@ -172,44 +172,62 @@ def update_system_configuration_endpoint(
 
 # --- Storm Background Task ---
 def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
-    crud.update_storm_run_status(db=db, run_id=run_id, status="running", user_id=user_id) # user_id voor scope
+    # Hoofdstatus naar running, stage naar INITIALIZING
+    crud.update_storm_run_status(db=db, run_id=run_id, status="running", user_id=user_id)
+    crud.update_storm_run_stage(db=db, run_id=run_id, stage="INITIALIZING", user_id=user_id)
 
     user_specific_output_segment = os.path.join(str(user_id), str(run_id))
     absolute_output_dir_for_storm_runner = os.path.join(settings.STORM_OUTPUT_DIR, user_specific_output_segment)
     
     try:
         os.makedirs(absolute_output_dir_for_storm_runner, exist_ok=True)
+        crud.update_storm_run_stage(db=db, run_id=run_id, stage="SETUP_COMPLETE", user_id=user_id)
         
-        actual_runner_instance = get_storm_runner()
-        if actual_runner_instance is None:
-            raise Exception("Failed to initialize Storm Runner for background task.")
+        actual_runner_instance = get_storm_runner() # Deze kan None retourneren als keys missen
 
+        if actual_runner_instance is None:
+            # Specifieke foutafhandeling als runner initialisatie faalt (bv. API keys missen)
+            error_message = "Failed to initialize Storm Runner: Required API key (e.g., OpenAI) might be missing or invalid. Please check system configuration."
+            print(f"Error for run {run_id} (user {user_id}): {error_message}")
+            crud.update_storm_run_stage(db=db, run_id=run_id, stage="RUNNER_INIT_FAILED", user_id=user_id)
+            crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=error_message, user_id=user_id)
+            return # Stop executie van deze background task
+            
+        crud.update_storm_run_stage(db=db, run_id=run_id, stage="RUNNER_INITIALIZED", user_id=user_id)
         actual_runner_instance.args.output_dir = absolute_output_dir_for_storm_runner
         
-        # Main run execution
+        crud.update_storm_run_stage(db=db, run_id=run_id, stage="STORM_PROCESSING", user_id=user_id)
         actual_runner_instance.run(topic=topic)
+        crud.update_storm_run_stage(db=db, run_id=run_id, stage="STORM_PROCESSING_DONE", user_id=user_id)
         
-        # Post-run, make this step best-effort
         try:
+            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING", user_id=user_id)
             actual_runner_instance.post_run()
+            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING_DONE", user_id=user_id)
         except Exception as post_run_exc:
             import traceback
             post_run_error_msg = str(post_run_exc)
             post_run_tb_str = traceback.format_exc()
             print(f"Warning: Error during post_run for run {run_id} (user {user_id}): {post_run_error_msg}\nTraceback: {post_run_tb_str}")
-            # Optionally, you could store this warning in the DB, e.g., in a new field or append to error_message
-            # For now, we just log it and proceed to mark the run as completed if run() was successful.
+            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING_FAILED", user_id=user_id)
 
         output_dir_to_db = user_specific_output_segment
+        crud.update_storm_run_stage(db=db, run_id=run_id, stage="FINALIZING", user_id=user_id)
         crud.update_storm_run_on_completion(db=db, run_id=run_id, status="completed", output_dir=output_dir_to_db, user_id=user_id)
-        print(f"Storm run {run_id} for user {user_id} completed (main execution successful). Output in: {absolute_output_dir_for_storm_runner}")
+        print(f"Storm run {run_id} for user {user_id} completed. Output in: {absolute_output_dir_for_storm_runner}")
 
-    except Exception as e: # Errors from makedirs, get_storm_runner, or actual_runner_instance.run()
-        import traceback
-        error_msg = str(e)
-        tb_str = traceback.format_exc()
-        print(f"Error in Storm run {run_id} for user {user_id}: {error_msg}\\nTraceback: {tb_str}")
-        crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=f"{error_msg} - See backend logs for full traceback.", user_id=user_id) # user_id voor scope
+    except Exception as e: 
+        # Algemene foutafhandeling voor onverwachte errors tijdens de run
+        # Als het niet al de runner initialisatie fout was.
+        if 'actual_runner_instance' in locals() and actual_runner_instance is not None: 
+            import traceback
+            error_msg = str(e)
+            tb_str = traceback.format_exc()
+            print(f"Error in Storm run {run_id} for user {user_id} (after runner init): {error_msg}\\nTraceback: {tb_str}")
+            # De stage kan hier al een specifieke fout aangeven, of nog op een processing stage staan
+            # crud.update_storm_run_stage(db=db, run_id=run_id, stage="UNEXPECTED_ERROR", user_id=user_id) # Optioneel
+            crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=f"Unexpected error: {error_msg} - See backend logs.", user_id=user_id)
+        # Als de fout al was afgehandeld (zoals runner init failed), doe hier niets meer.
 
 # --- Helper functie om een topic string naar een slug te converteren ---
 def create_topic_slug(topic: str) -> str:
@@ -268,18 +286,23 @@ async def get_storm_run_status(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(security.get_current_active_user)
 ):
-    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
-    if not run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or not owned by user")
-    return {
-        "job_id": run.id, 
-        "status": run.status, 
-        "topic": run.topic,
-        "start_time": run.start_time,
-        "end_time": run.end_time,
-        "output_dir": run.output_dir,
-        "error_message": run.error_message
-    }
+    """Get the status of a specific Storm run."""
+    is_admin_check = current_user.role == "admin"
+    db_run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=is_admin_check)
+    if not db_run:
+        raise HTTPException(status_code=404, detail="Storm run not found or not owned by user")
+    
+    # Summary en article content hier niet laden, dat zijn aparte endpoints
+    return schemas.StormRunStatusResponse(
+        job_id=db_run.id,
+        status=db_run.status,
+        current_stage=db_run.current_stage, # Voeg current_stage toe aan de response
+        topic=db_run.topic,
+        start_time=db_run.start_time,
+        end_time=db_run.end_time,
+        output_dir=db_run.output_dir,
+        error_message=db_run.error_message
+    )
 
 @storm_router.get("/history", response_model=List[schemas.StormRunHistoryItem])
 async def get_storm_run_history(

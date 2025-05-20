@@ -2,7 +2,6 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || '/api'; // Gebruik env var
 
 export async function fetchWithAuth(url, options = {}, logoutAction = null) {
     const token = localStorage.getItem('authToken');
-    console.log("fetchWithAuth: Using token:", token ? token.substring(0, 10) + '...' : 'null or empty');
     const headers = {
         ...options.headers,
         'Authorization': token ? `Bearer ${token}` : ''
@@ -21,7 +20,6 @@ export async function fetchWithAuth(url, options = {}, logoutAction = null) {
     if (response.status === 401) {
         localStorage.removeItem('authToken');
         if (logoutAction) {
-            console.log("fetchWithAuth: Detected 401, calling logoutAction.");
             logoutAction();
         } else {
             console.warn("fetchWithAuth: logoutAction not provided, cannot perform clean logout.");
@@ -30,7 +28,6 @@ export async function fetchWithAuth(url, options = {}, logoutAction = null) {
     }
 
     const contentType = response.headers.get('content-type');
-    console.log(`fetchWithAuth for ${url}: Content-Type: ${contentType}, Status: ${response.status}`);
 
     if (!response.ok && response.status !== 204) { 
         const errorData = await response.json().catch(() => ({ detail: `Failed to fetch with status ${response.status}` }));
@@ -43,11 +40,9 @@ export async function fetchWithAuth(url, options = {}, logoutAction = null) {
     }
 
     if (contentType && (contentType.includes('text/plain') || contentType.includes('text/markdown'))) {
-        console.log(`fetchWithAuth for ${url}: Returning as text.`);
         return await response.text();
     }
     
-    console.log(`fetchWithAuth for ${url}: Attempting to parse as JSON.`);
     try {
         return await response.json(); 
     } catch (e) {

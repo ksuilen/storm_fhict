@@ -51,6 +51,20 @@ def update_storm_run_status(db: Session, run_id: int, status: str, user_id: int)
         db_run.status = status
         if status == "running" and db_run.start_time is None: # Zet starttijd indien nog niet gezet
              db_run.start_time = datetime.now(timezone.utc)
+        # Als de hoofdstatus niet meer 'running' is, reset de current_stage
+        if status != "running":
+            db_run.current_stage = None
+        db.commit()
+        db.refresh(db_run)
+    return db_run
+
+def update_storm_run_stage(db: Session, run_id: int, stage: str, user_id: int) -> models.StormRun | None:
+    """Update alleen de current_stage van een StormRun."""
+    # We gaan ervan uit dat de hoofdstatus al 'running' is als dit wordt aangeroepen.
+    # Eigendom wordt gecheckt door get_storm_run.
+    db_run = get_storm_run(db, run_id=run_id, user_id=user_id)
+    if db_run and db_run.status == "running": # Update alleen stage als de run nog 'running' is
+        db_run.current_stage = stage
         db.commit()
         db.refresh(db_run)
     return db_run

@@ -21,7 +21,8 @@ class StormRun(Base):
     __tablename__ = "storm_runs"
     id = Column(Integer, primary_key=True, index=True)
     topic = Column(String, index=True)
-    status = Column(String, default="pending")
+    status = Column(String, default="pending") # Hoofdstatus: pending, running, completed, failed
+    current_stage = Column(String, nullable=True) # Gedetailleerde stage van de run
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
     output_dir = Column(String, nullable=True)

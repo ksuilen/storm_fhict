@@ -72,6 +72,7 @@ class StormRunCreate(StormRunBase):
 class StormRun(StormRunBase):
     id: int
     status: str
+    current_stage: Optional[str] = None
     start_time: datetime
     end_time: datetime | None = None
     output_dir: str | None = None
@@ -90,6 +91,7 @@ class StormRunJobResponse(BaseModel):
 class StormRunStatusResponse(BaseModel):
     job_id: int
     status: str
+    current_stage: Optional[str] = None
     topic: str
     start_time: datetime
     end_time: datetime | None = None

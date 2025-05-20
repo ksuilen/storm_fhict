@@ -31,30 +31,67 @@ const HomeRoute = () => {
 const AdminRoute = ({ children }) => {
     const { user, isLoading } = useAuth();
     // Voeg window.location.pathname toe aan de logs voor context
-    console.log(`AdminRoute Check: Path='${window.location.pathname}', isLoading=${isLoading}, User Loaded=${!!user}, User Role=${user?.role}`);
+    // console.log(`AdminRoute Check: Path='${window.location.pathname}', isLoading=${isLoading}, User Loaded=${!!user}, User Role=${user?.role}`);
 
     if (isLoading) {
-        console.log(`AdminRoute Decision: Path='${window.location.pathname}', Rendering loading state.`);
+        // console.log(`AdminRoute Decision: Path='${window.location.pathname}', Rendering loading state.`);
         return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Authenticatie controleren...</p></div>;
     }
     if (!user) {
-        console.log(`AdminRoute Decision: Path='${window.location.pathname}', No user, redirecting to /login.`);
+        // console.log(`AdminRoute Decision: Path='${window.location.pathname}', No user, redirecting to /login.`);
         return <Navigate to="/login" replace />;
     }
     if (user.role !== 'admin') {
-        console.log(`AdminRoute Decision: Path='${window.location.pathname}', User role is '${user.role}', not 'admin'. Redirecting to /dashboard.`);
-        return <Navigate to="/dashboard" replace />; 
+        // console.log(`AdminRoute Decision: Path='${window.location.pathname}', User role is '${user.role}', not 'admin'. Redirecting to /dashboard.`);
+        return <Navigate to="/dashboard" replace />;
     }
-    console.log(`AdminRoute Decision: Path='${window.location.pathname}', User is admin. Rendering children.`);
+    // console.log(`AdminRoute Decision: Path='${window.location.pathname}', User is admin. Rendering children.`);
     return children;
 };
 
-// Helper function for status badge styling
-const getStatusBadgeClass = (status) => {
+// Helper functie voor stage display tekst
+const getStageDisplayText = (stage) => {
+    switch (stage) {
+        case 'INITIALIZING': return "Initialiseren...";
+        case 'SETUP_COMPLETE': return "Voorbereiden...";
+        case 'RUNNER_INITIALIZED': return "Storm engine gestart...";
+        case 'STORM_PROCESSING': return "Kennis vergaren & verwerken...";
+        case 'STORM_PROCESSING_DONE': return "Verwerking data afgerond...";
+        case 'GENERATING_OUTLINE': return "Inhoudsopgave genereren...";
+        case 'GENERATING_ARTICLE': return "Artikel genereren...";
+        case 'POLISHING_CONTENT': return "Tekst polijsten...";
+        case 'POST_PROCESSING': return "Resultaten samenstellen...";
+        case 'POST_PROCESSING_DONE': return "Samenstellen afgerond...";
+        case 'FINALIZING': return "Afronden...";
+        case 'RUNNER_INIT_FAILED': return "Fout bij initialisatie";
+        case 'POST_PROCESSING_FAILED': return "Fout bij resultaatverwerking";
+        default: return stage ? `(${stage})` : '(Bezig...)'; // Toon technische stage als geen mapping
+    }
+};
+
+// Helper function for status badge styling (vervangt oude getStatusBadgeClass)
+const getDynamicStatusBadgeClass = (status, stage = null) => {
+    if (status === 'running') {
+        switch (stage) {
+            case 'INITIALIZING': return 'bg-info text-dark';
+            case 'SETUP_COMPLETE': return 'bg-info text-dark';
+            case 'RUNNER_INITIALIZED': return 'bg-primary';
+            case 'STORM_PROCESSING': return 'bg-primary';
+            case 'STORM_PROCESSING_DONE': return 'bg-primary';
+            case 'GENERATING_OUTLINE': return 'bg-secondary';
+            case 'GENERATING_ARTICLE': return 'bg-secondary';
+            case 'POLISHING_CONTENT': return 'bg-secondary';
+            case 'POST_PROCESSING': return 'bg-secondary';
+            case 'POST_PROCESSING_DONE': return 'bg-secondary';
+            case 'FINALIZING': return 'bg-success';
+            case 'RUNNER_INIT_FAILED': return 'bg-danger';
+            case 'POST_PROCESSING_FAILED': return 'bg-warning text-dark';
+            default: return 'bg-primary';
+        }
+    }
     switch (status) {
         case 'completed': return 'bg-success';
-        case 'running': return 'bg-primary';
-        case 'pending': return 'bg-warning text-dark'; // Aangepast voor betere leesbaarheid
+        case 'pending': return 'bg-warning text-dark';
         case 'failed': return 'bg-danger';
         default: return 'bg-light text-dark';
     }
@@ -74,14 +111,14 @@ function Dashboard() {
     const [topic, setTopic] = useState(''); // State voor nieuw run topic
     const [isSubmitting, setIsSubmitting] = useState(false); // State voor submit knop
 
-    console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
+    // console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
 
     const pollIntervalRef = React.useRef(null);
     const initialHistoryFetchAttempted = React.useRef(false); // Ref om initiële fetch te volgen
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
-            console.log("Stopping polling.");
+            // console.log("Stopping polling.");
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
@@ -89,7 +126,7 @@ function Dashboard() {
 
     const fetchRunHistory = useCallback(async () => {
         if (!user || authIsLoading) {
-            console.log("Skipping fetchRunHistory: user not yet available or auth is loading.");
+            // console.log("Skipping fetchRunHistory: user not yet available or auth is loading.");
             setRuns([]);
             return;
         }
@@ -122,7 +159,7 @@ function Dashboard() {
 
         // We zijn alleen geïnteresseerd in het laden van details als de run voltooid is.
         if (!runToUse || runToUse.status !== 'completed') {
-             console.log(`fetchRunDetails for ${runId}: Run status is '${runToUse?.status}', not 'completed'. Clearing details.`);
+             // console.log(`fetchRunDetails for ${runId}: Run status is '${runToUse?.status}', not 'completed'. Clearing details.`);
              setArticleContent('');
              setOutlineContent('');
              setSources([]);
@@ -152,10 +189,60 @@ function Dashboard() {
                 })
             ]);
 
-            console.log("Raw sourcesData from backend /summary:", sourcesData);
+            // console.log("Raw sourcesData from backend /summary:", sourcesData);
 
-            setArticleContent(articleData || ''); // articleData is text
-            setOutlineContent(outlineData || ''); // outlineData is text
+            // Robust handling for articleData
+            let finalArticleContent = '';
+            if (typeof articleData === 'string') {
+                finalArticleContent = articleData;
+            } else if (articleData && typeof articleData === 'object') {
+                if (typeof articleData.article_text === 'string') {
+                    finalArticleContent = articleData.article_text;
+                } else if (typeof articleData.text === 'string') {
+                    finalArticleContent = articleData.text;
+                } else if (typeof articleData.content === 'string') {
+                    finalArticleContent = articleData.content;
+                } else if (typeof articleData.message === 'string') {
+                    finalArticleContent = `Fout bij laden van artikel: ${articleData.message}`;
+                } else if (typeof articleData.detail === 'string') { // FastAPI common error detail
+                    finalArticleContent = `Fout bij laden van artikel: ${articleData.detail}`;
+                } else {
+                    console.warn("Article data received was an object, not a string. Stringifying for display:", articleData);
+                    finalArticleContent = `Onverwacht artikelformaat. Ruwe data: ${JSON.stringify(articleData)}`;
+                }
+            } else if (articleData === null || articleData === undefined) {
+                 finalArticleContent = 'Artikel (nog) niet beschikbaar.';
+            } else {
+                 finalArticleContent = 'Kon artikel niet laden (onbekend formaat).';
+            }
+            setArticleContent(finalArticleContent);
+
+            // Robust handling for outlineData
+            let finalOutlineContent = '';
+            if (typeof outlineData === 'string') {
+                finalOutlineContent = outlineData;
+            } else if (outlineData && typeof outlineData === 'object') {
+                if (typeof outlineData.outline_text === 'string') {
+                    finalOutlineContent = outlineData.outline_text;
+                } else if (typeof outlineData.text === 'string') {
+                    finalOutlineContent = outlineData.text;
+                } else if (typeof outlineData.content === 'string') {
+                    finalOutlineContent = outlineData.content;
+                } else if (typeof outlineData.message === 'string') {
+                    finalOutlineContent = `Fout bij laden van inhoudsopgave: ${outlineData.message}`;
+                } else if (typeof outlineData.detail === 'string') {
+                    finalOutlineContent = `Fout bij laden van inhoudsopgave: ${outlineData.detail}`;
+                } else {
+                    console.warn("Outline data received was an object, not a string. Stringifying for display:", outlineData);
+                    finalOutlineContent = `Onverwacht formaat inhoudsopgave. Ruwe data: ${JSON.stringify(outlineData)}`;
+                }
+            } else if (outlineData === null || outlineData === undefined) {
+                finalOutlineContent = 'Inhoudsopgave (nog) niet beschikbaar.';
+            } else {
+                finalOutlineContent = 'Kon inhoudsopgave niet laden (onbekend formaat).';
+            }
+            setOutlineContent(finalOutlineContent);
+            
             setSources(sourcesData || []); // Update de sources state!
 
         } catch (err) {
@@ -172,22 +259,18 @@ function Dashboard() {
     }, [runs, logoutAction, selectedRun]);
 
     const fetchRunStatus = useCallback(async (jobId) => {
-        // LOG AAN HET BEGIN VAN fetchRunStatus (KAN BEHOUDEN WORDEN INDIEN GEWENST, OF VERWIJDERD)
-        // console.log(`fetchRunStatus CALLED for jobId: ${jobId}. Current selectedRun in closure:`, 
-        //             selectedRun ? { id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic } : null);
-
         try {
-            // console.log(`Polling status for job ${jobId}`); // Kan veel logs geven
             const statusData = await fetchWithAuth(`/storm/status/${jobId}`, { method: 'GET' }, logoutAction);
-            // console.log("Status data received:", statusData); // Kan veel logs geven
 
-            // Update de specifieke run in de lijst ALLEEN als de status verandert
             setRuns(prevRuns => {
                 const runIndex = prevRuns.findIndex(run => run.id === jobId);
                 if (runIndex === -1) return prevRuns;
                 
                 const currentRunInList = prevRuns[runIndex];
-                if (currentRunInList.status === statusData.status && currentRunInList.error_message === statusData.error_message) {
+                // Check of status of current_stage daadwerkelijk gewijzigd is
+                if (currentRunInList.status === statusData.status && 
+                    currentRunInList.current_stage === statusData.current_stage && 
+                    currentRunInList.error_message === statusData.error_message) {
                     return prevRuns; 
                 }
                 
@@ -195,29 +278,28 @@ function Dashboard() {
                 newRuns[runIndex] = { 
                     ...currentRunInList, 
                     status: statusData.status,
-                    error_message: statusData.error_message // Voeg error message toe aan runs lijst update
+                    current_stage: statusData.current_stage, // Sla current_stage op
+                    error_message: statusData.error_message
                 };
                 return newRuns;
             });
 
             setSelectedRun(prevSelected => {
-                // console.log(`Inside setSelectedRun updater for selectedRun. jobId from poll: ${jobId}, prevSelected:`, 
-                //             prevSelected ? { id: prevSelected.id, status: prevSelected.status } : null);
-
                 if (prevSelected && prevSelected.id === jobId) {
-                    if (statusData && (prevSelected.status !== statusData.status || prevSelected.error_message !== statusData.error_message)) {
-                        // console.log(`Attempting to update selectedRun (id: ${prevSelected.id}). Current status: ${prevSelected.status}, New statusData.status: ${statusData.status}`);
+                    // Check of status of current_stage daadwerkelijk gewijzigd is
+                    if (statusData && (prevSelected.status !== statusData.status || 
+                                      prevSelected.current_stage !== statusData.current_stage || 
+                                      prevSelected.error_message !== statusData.error_message)) {
                         const newState = {
                             ...prevSelected,
                             ...(statusData || {}),
                             id: prevSelected.id, 
-                            topic: prevSelected.topic || (statusData?.topic || "Unknown Topic")
+                            topic: prevSelected.topic || (statusData?.topic || "Unknown Topic"),
+                            current_stage: statusData.current_stage // Sla current_stage op
                         };
                         delete newState.job_id;
-                        // console.log(`setSelectedRun: New state for selectedRun (id: ${newState.id}):`, JSON.stringify({ id: newState.id, status: newState.status, topic: newState.topic, end_time: newState.end_time, error_message: newState.error_message }));
                         return newState;
                     }
-                    // console.log(`SelectedRun (id: ${prevSelected.id}) status (${prevSelected.status}) is same as statusData.status (${statusData?.status}). No update needed.`);
                     return prevSelected; 
                 }
                 return prevSelected; 
@@ -225,23 +307,17 @@ function Dashboard() {
 
             if (statusData && statusData.job_id === jobId && statusData.status === 'completed') {
                 if (selectedRun && selectedRun.id === jobId) { 
-                    // console.log(`Run ${jobId} (selected) has status 'completed'. Fetching details.`);
                     fetchRunDetails(jobId, statusData); 
                 }
             }
 
-            // Stop polling for completed or failed/error runs
             if (statusData.status === 'completed' || statusData.status === 'failed' || statusData.status === 'error' || statusData.status === 'cancelled') {
-                // console.log(`Run ${jobId} (from status poll) finished with status: ${statusData.status}. Attempting to stop polling.`);
                 if (pollIntervalRef.current) { 
                      stopPolling(); 
                 }
             }
         } catch (err) {
             console.error(`Failed to fetch status for job ${jobId}:`, err);
-            if (err.message !== 'Unauthorized') {
-                // console.warn(`Polling error for ${jobId}: ${err.message}`);
-            }
         }
     }, [selectedRun, fetchRunDetails, stopPolling, logoutAction]);
 
@@ -259,20 +335,20 @@ function Dashboard() {
     useEffect(() => {
         // Als auth nog laadt, doe nog niets.
         if (authIsLoading) {
-            console.log("Dashboard useEffect: Auth is loading, skipping history fetch logic.");
+            // console.log("Dashboard useEffect: Auth is loading, skipping history fetch logic.");
             return () => stopPolling();
         }
 
         if (user) {
             // Gebruiker is ingelogd
             if (!initialHistoryFetchAttempted.current) {
-                console.log("Dashboard useEffect: User logged in, initial fetch attempt.");
+                // console.log("Dashboard useEffect: User logged in, initial fetch attempt.");
                 fetchRunHistory();
                 initialHistoryFetchAttempted.current = true;
             }
         } else {
             // Geen gebruiker (uitgelogd), reset de fetch poging flag.
-            console.log("Dashboard useEffect: No user, resetting initial fetch flag.");
+            // console.log("Dashboard useEffect: No user, resetting initial fetch flag.");
             initialHistoryFetchAttempted.current = false;
             setRuns([]); // Leeg de runs als de gebruiker uitlogt
             setSelectedRun(null); // Deselecteer run
@@ -282,7 +358,7 @@ function Dashboard() {
         }
 
         return () => {
-            console.log("Dashboard useEffect cleanup: Stopping polling.");
+            // console.log("Dashboard useEffect cleanup: Stopping polling.");
             stopPolling();
         };
     }, [stopPolling, authIsLoading, user, fetchRunHistory]);
@@ -320,7 +396,7 @@ function Dashboard() {
                 method: 'POST',
                 body: JSON.stringify({ topic: topic })
             }, logoutAction);
-            console.log("New run initiated (API response):", newRunDataFromApi);
+            // console.log("New run initiated (API response):", newRunDataFromApi);
             setTopic(''); // Clear input field
 
             // Map job_id to id for frontend consistency
@@ -413,7 +489,9 @@ function Dashboard() {
                             <div className="run-info me-3 overflow-hidden">
                                 <div className="d-flex align-items-center">
                                     <span className="fw-bold me-2 text-truncate">{run.topic}</span>
-                                    <span className={`badge rounded-pill ${getStatusBadgeClass(run.status)}`}>{run.status}</span>
+                                    <span className={`badge rounded-pill ${getDynamicStatusBadgeClass(run.status, run.current_stage)}`}>
+                                        {run.status === 'running' ? getStageDisplayText(run.current_stage) : run.status}
+                                    </span>
                                 </div>
                                 <small className="text-muted d-block">
                                     {run.start_time ? new Date(run.start_time).toLocaleString() : 'Invalid Date'}
@@ -441,8 +519,12 @@ function Dashboard() {
                         <h3>{selectedRun.topic} (ID: {selectedRun.id})</h3>
                         <p>
                             <strong>Status:</strong> 
-                            <span className={`badge rounded-pill ms-2 ${getStatusBadgeClass(selectedRun.status)}`}>
-                                {selectedRun.status}
+                            <span className={`badge rounded-pill ms-2 ${getDynamicStatusBadgeClass(selectedRun.status, selectedRun.current_stage)}`}>
+                                {selectedRun.status === 'running' 
+                                    ? getStageDisplayText(selectedRun.current_stage) 
+                                    : (selectedRun.status === 'failed' && selectedRun.error_message 
+                                        ? `${selectedRun.status} (Fout: ${selectedRun.error_message.substring(0,50)}${selectedRun.error_message.length > 50 ? '...':''})` 
+                                        : selectedRun.status)}
                             </span>
                         </p>
                          {(selectedRun.status === 'running' || selectedRun.status === 'pending') && (
@@ -466,7 +548,7 @@ function Dashboard() {
                                      <h4 className="mb-0">Inhoudsopgave</h4>
                                  </div>
                                 <div className="card-body">
-                                    <pre className="outline-content bg-light p-2 rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>{outlineContent || 'Geen inhoudsopgave beschikbaar.'}</pre>
+                                    <pre className="outline-content bg-light p-2 rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>{outlineContent || (selectedRun.status === 'completed' && !isLoadingDetails ? 'Geen inhoudsopgave beschikbaar.' : '')}</pre>
                                  </div>
                              </div>
                          )}
@@ -510,7 +592,10 @@ function Dashboard() {
                                         }
                                       }}
                                     >
-                                      {articleContent || (selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? <span className="text-muted">Selecteer een voltooide run om resultaten te zien.</span> : '')}
+                                      {articleContent ? articleContent : 
+                                        (selectedRun && selectedRun.status === 'completed' && !isLoadingDetails ? "Geen artikel beschikbaar." : 
+                                        (selectedRun && selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? "Resultaten worden geladen of zijn niet beschikbaar voor deze status." : 
+                                        ""))}
                                     </ReactMarkdown>
                                 </div>
                             </div>
