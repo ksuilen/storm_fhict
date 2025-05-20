@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic[email]
+pydantic-settings
 sqlalchemy
 passlib[bcrypt]
 python-jose[cryptography]
@@ -10,4 +11,5 @@ bcrypt==4.0.1
 openai
 youdotcom
 tavily-python
-alembic==1.13.1 
+alembic==1.13.1
+knowledge_storm 

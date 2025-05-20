@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .core.config import settings
 
+# Gebruik de geconfigureerde DATABASE_URL property
 SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
 # Voor SQLite:
 # SQLALCHEMY_DATABASE_URL = "sqlite:///./storm_app.db"

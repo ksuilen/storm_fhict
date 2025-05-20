@@ -1,6 +1,8 @@
 // API calls voor authenticatie (login, register, getCurrentUser)
 
+// console.log("REACT_APP_API_URL in authService:", process.env.REACT_APP_API_URL); // VERWIJDERD
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000'; // Je backend URL
+// console.log("Effective API_URL:", API_URL); // VERWIJDERD
 
 export const login = async (email, password) => {
     const response = await fetch(`${API_URL}/token`, {

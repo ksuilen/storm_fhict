@@ -9,6 +9,7 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
 import './App.css';
+import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
 
 const PrivateRoute = ({ children }) => {
     const { user, isLoading } = useAuth();
@@ -47,73 +48,6 @@ const AdminRoute = ({ children }) => {
     console.log(`AdminRoute Decision: Path='${window.location.pathname}', User is admin. Rendering children.`);
     return children;
 };
-
-// --- API Helper ---
-// (Vervang met je daadwerkelijke API service/configuratie)
-const API_BASE_URL = 'http://localhost:8000'; // Backend URL
-
-async function fetchWithAuth(url, options = {}, logoutAction = null) {
-    const token = localStorage.getItem('authToken');
-    console.log("fetchWithAuth: Using token:", token ? token.substring(0, 10) + '...' : 'null or empty');
-    const headers = {
-        ...options.headers,
-        'Authorization': token ? `Bearer ${token}` : ''
-        // Content-Type wordt hier niet meer standaard gezet, alleen als er een body is.
-    };
-
-    if (options.body && !(options.body instanceof FormData)) { // FormData zet zijn eigen Content-Type
-        headers['Content-Type'] = 'application/json';
-    }
-
-    // Voor GET requests, verwijder Content-Type als er geen body is (tenzij expliciet gezet)
-    // Dit is een beetje dubbelop met bovenstaande, maar voor de zekerheid.
-    if ((options.method === 'GET' || !options.body) && !options.headers?.['Content-Type']) {
-        delete headers['Content-Type'];
-    }
-
-    const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
-
-    if (response.status === 401) {
-        localStorage.removeItem('authToken');
-        if (logoutAction) {
-            console.log("fetchWithAuth: Detected 401, calling logoutAction.");
-            logoutAction();
-        } else {
-            console.warn("fetchWithAuth: logoutAction not provided, cannot perform clean logout.");
-        }
-        throw new Error('Unauthorized');
-    }
-
-    const contentType = response.headers.get('content-type');
-    console.log(`fetchWithAuth for ${url}: Content-Type: ${contentType}, Status: ${response.status}`);
-
-    if (!response.ok && response.status !== 204) { 
-        const errorData = await response.json().catch(() => ({ detail: `Failed to fetch with status ${response.status}` }));
-        console.error('API Error:', errorData);
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-    }
-
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-        return null; 
-    }
-
-    if (contentType && (contentType.includes('text/plain') || contentType.includes('text/markdown'))) {
-        console.log(`fetchWithAuth for ${url}: Returning as text.`);
-        return await response.text();
-    }
-    
-    // Default to JSON if not text/plain or text/markdown
-    console.log(`fetchWithAuth for ${url}: Attempting to parse as JSON.`);
-    try {
-        return await response.json(); 
-    } catch (e) {
-        console.error(`fetchWithAuth for ${url}: Failed to parse JSON. Content-Type was ${contentType}. Error:`, e);
-        // Probeer de body als tekst te lezen om te zien wat er misging, als debug info
-        const textBody = await response.text().catch(() => "Could not read response body as text.");
-        console.error("Response body (text fallback):", textBody.substring(0, 500)); // Log eerste 500 chars
-        throw new Error(`Failed to parse JSON from ${url}. Server responded with Content-Type: ${contentType} but body was not valid JSON. Check console for text fallback.`);
-    }
-}
 
 // Helper function for status badge styling
 const getStatusBadgeClass = (status) => {

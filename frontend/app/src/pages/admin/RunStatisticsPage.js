@@ -1,31 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext'; // Pas pad aan indien nodig
+import { fetchWithAuth } from '../../services/apiService'; // Importeer gecentraliseerde fetchWithAuth
 
-const API_BASE_URL = 'http://localhost:8000'; // Of haal uit een config
+// const API_BASE_URL = 'http://localhost:8000'; // VERWIJDERD
 
-// Functie om API calls te maken (vergelijkbaar met die in App.js, evt. centraliseren)
-async function fetchWithAuthAdmin(url, options = {}, logoutAction) {
-    const token = localStorage.getItem('authToken');
-    const headers = {
-        ...options.headers,
-        'Content-Type': 'application/json',
-        'Authorization': token ? `Bearer ${token}` : ''
-    };
-    if (options.method === 'GET' || !options.body) {
-        delete headers['Content-Type'];
-    }
-    const response = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
-    if (response.status === 401) {
-        if (logoutAction) logoutAction();
-        throw new Error('Unauthorized');
-    }
-    if (!response.ok && response.status !== 204) {
-        const errorData = await response.json().catch(() => ({ detail: 'API Error' }));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-    }
-    if (response.status === 204) return null;
-    return response.json();
-}
+// Functie om API calls te maken (vergelijkbaar met die in App.js, evt. centraliseren) - VERWIJDERD
+// async function fetchWithAuthAdmin(url, options = {}, logoutAction) { ... }
 
 function RunStatisticsPage() {
     const { logoutAction } = useAuth();
@@ -37,7 +17,8 @@ function RunStatisticsPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await fetchWithAuthAdmin('/admin/stats/runs_per_user', { method: 'GET' }, logoutAction);
+            // Gebruik nu de gecentraliseerde fetchWithAuth
+            const data = await fetchWithAuth('/admin/stats/runs_per_user', { method: 'GET' }, logoutAction);
             setStats(data || []);
         } catch (err) {
             setError(err.message);
