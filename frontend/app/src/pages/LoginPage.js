@@ -1,14 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+// import { Link, useNavigate, useLocation } from 'react-router-dom'; // Link is niet gebruikt
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchWithAuth } from '../services/apiService'; // CORRECTED IMPORT
+import {
+    Container,
+    Row,
+    Col,
+    Form,
+    Button,
+    Alert,
+    Nav // For the Admin/Voucher toggle
+} from 'react-bootstrap';
+import './LoginPage.css';
 
 function LoginPage() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const { loginAction, error, setError, user } = useAuth();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loginType, setLoginType] = useState('admin'); // 'admin' or 'voucher'
+    const [email, setEmail] = useState('admin@example.com');
+    const [password, setPassword] = useState('Password');
+    const [voucherCode, setVoucherCode] = useState('');
+    const { login, error, setError, user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const [message, setMessage] = useState(location.state?.message || '');
 
     useEffect(() => {
         // Als er een bericht is vanuit de state (bv. na redirect van ProtectedRoute), wis het na tonen
@@ -29,62 +43,109 @@ function LoginPage() {
 
     }, [user, navigate, location, setError]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setMessage(''); // Wis pagina-specifiek bericht bij nieuwe poging
-        await loginAction(email, password);
-        // Navigatie gebeurt in loginAction of AuthContext op basis van user state
+    const handleLogin = async (event) => {
+        event.preventDefault();
+        setIsSubmitting(true);
+        setError('');
+
+        if (loginType === 'admin') {
+            const body = new URLSearchParams();
+            body.append('username', email);
+            body.append('password', password);
+
+            try {
+                const data = await fetchWithAuth('/api/v1/login/access-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: body,
+                });
+                login(data.access_token); 
+                navigate('/dashboard');
+            } catch (err) {
+                console.error("Admin login error:", err);
+                setError(err.message || 'Failed to login as admin. Please check credentials.');
+            }
+        } else { // Voucher login
+            try {
+                const data = await fetchWithAuth('/api/v1/login/voucher', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voucher_code: voucherCode }),
+                });
+                login(data.access_token);
+                navigate('/dashboard'); 
+            } catch (err) {
+                console.error("Voucher login error:", err);
+                setError(err.message || 'Failed to login with voucher. Please check the code and try again.');
+            }
+        }
+        setIsSubmitting(false);
     };
 
     return (
-        <div className="container mt-5">
-            <div className="row justify-content-center">
-                <div className="col-md-6 col-lg-5">
-                    <div className="card shadow-sm">
-                        <div className="card-body p-4">
-                            {/* Enkele titel nu, gecentreerd en groter */}
-                            <h1 className="card-title text-center mb-4 h3">Login</h1> 
-                            
-                            {message && <div className="alert alert-info">{message}</div>}
-                            {error && <div className="alert alert-danger">{error}</div>}
-                            
-                            <form onSubmit={handleSubmit}>
-                                <div className="mb-3">
-                                    <label htmlFor="emailInput" className="form-label">E-mailadres</label>
-                                    <input 
-                                        type="email" 
-                                        className="form-control form-control-lg"
-                                        id="emailInput"
-                                        value={email} 
-                                        onChange={(e) => setEmail(e.target.value)} 
-                                        placeholder="uwemail@example.com"
-                                        required 
+        <Container fluid className="login-page-container d-flex align-items-center justify-content-center">
+            <Row className="w-100 justify-content-center">
+                <Col md={6} lg={4} className="p-4 bg-light rounded shadow login-form-col">
+                    <h2 className="text-center mb-4">{loginType === 'admin' ? 'Admin Login' : 'Voucher Login'}</h2>
+                    
+                    <Nav variant="pills" activeKey={loginType} onSelect={(k) => setLoginType(k)} className="mb-3 nav-fill">
+                        <Nav.Item>
+                            <Nav.Link eventKey="admin" disabled={isSubmitting}>Admin</Nav.Link>
+                        </Nav.Item>
+                        <Nav.Item>
+                            <Nav.Link eventKey="voucher" disabled={isSubmitting}>Voucher</Nav.Link>
+                        </Nav.Item>
+                    </Nav>
+
+                    {error && <Alert variant="danger">{error}</Alert>}
+
+                    <Form onSubmit={handleLogin}>
+                        {loginType === 'admin' ? (
+                            <>
+                                <Form.Group className="mb-3" controlId="email">
+                                    <Form.Label>Email address</Form.Label>
+                                    <Form.Control
+                                        type="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        disabled={isSubmitting}
+                                        placeholder="Enter email"
                                     />
-                                </div>
-                                <div className="mb-3">
-                                    <label htmlFor="passwordInput" className="form-label">Wachtwoord</label>
-                                    <input 
-                                        type="password" 
-                                        className="form-control form-control-lg" 
-                                        id="passwordInput" 
-                                        value={password} 
-                                        onChange={(e) => setPassword(e.target.value)} 
-                                        placeholder="Wachtwoord"
-                                        required 
+                                </Form.Group>
+
+                                <Form.Group className="mb-3" controlId="password">
+                                    <Form.Label>Password</Form.Label>
+                                    <Form.Control
+                                        type="password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        disabled={isSubmitting}
+                                        placeholder="Password"
                                     />
-                                </div>
-                                <button type="submit" className="btn btn-primary btn-lg w-100 mt-3">
-                                    Login
-                                </button>
-                            </form>
-                            <p className="mt-4 text-center mb-0">
-                                Nog geen account? <Link to="/register">Registreer hier</Link>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+                                </Form.Group>
+                            </>
+                        ) : (
+                            <Form.Group className="mb-3" controlId="voucherCode">
+                                <Form.Label>Voucher Code</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    value={voucherCode}
+                                    onChange={(e) => setVoucherCode(e.target.value)}
+                                    required
+                                    disabled={isSubmitting}
+                                    placeholder="Enter voucher code"
+                                />
+                            </Form.Group>
+                        )}
+                        <Button variant="primary" type="submit" className="w-100" disabled={isSubmitting}>
+                            {isSubmitting ? 'Logging in...' : 'Login'}
+                        </Button>
+                    </Form>
+                </Col>
+            </Row>
+        </Container>
     );
 }
 

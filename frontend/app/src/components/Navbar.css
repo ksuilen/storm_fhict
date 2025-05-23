@@ -1,0 +1,164 @@
+/* General Navbar Styling */
+.navbar {
+    background-color: #333; /* Donkergrijs/Zwart thema */
+    height: 80px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.1rem;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.navbar-container {
+    display: flex;
+    justify-content: space-between; /* Items spreiden */
+    height: 80px;
+    z-index: 1;
+    width: 100%;
+    max-width: 1300px; /* Maximale breedte van de content binnen de navbar */
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 20px; /* Wat padding aan de zijkanten */
+    padding-left: 20px;
+}
+
+.navbar-logo {
+    color: #fff;
+    justify-self: start;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 2rem; /* Groter logo */
+    display: flex;
+    align-items: center;
+    font-weight: bold;
+}
+
+.nav-menu {
+    display: flex;
+    align-items: center;
+    list-style: none;
+    text-align: center;
+    margin-right: -22px; /* Kan aangepast worden voor alignment */
+}
+
+.nav-item {
+    height: 80px;
+    display: flex; /* Zorgt ervoor dat de link de volledige hoogte inneemt */
+    align-items: center; /* Verticaal centreren van de link */
+}
+
+.nav-links {
+    color: #fff;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    height: 100%; /* Link vult de hoogte van nav-item */
+    border-bottom: 3px solid transparent; /* Voorbereiding voor active state */
+    transition: all 0.2s ease-out;
+}
+
+.nav-links:hover {
+    color: #17a2b8; /* Cyaan kleur bij hover, of een andere accentkleur */
+    border-bottom: 3px solid #17a2b8;
+}
+
+.nav-links.active {
+    color: #17a2b8;
+    border-bottom: 3px solid #17a2b8; 
+}
+
+/* User Info & Auth Buttons */
+.navbar-user-info {
+    display: flex;
+    align-items: center;
+}
+
+.user-details {
+    color: #f0f0f0; /* Lichtgrijs voor details */
+    margin-right: 15px;
+    font-size: 0.9rem;
+}
+
+.btn-outline-light {
+    color: #f8f9fa;
+    border-color: #f8f9fa;
+    padding: 8px 15px;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.btn-outline-light:hover {
+    color: #333;
+    background-color: #f8f9fa;
+}
+
+.logout-button {
+    margin-left: 10px; /* Extra ruimte als er user details zijn */
+}
+
+/* Dropdown styling (indien gebruikt) */
+.nav-item.dropdown {
+  height: 80px; /* Zorg dat dropdown item dezelfde hoogte heeft */
+}
+
+.dropdown-toggle::after {
+    display: none; /* Verberg standaard Bootstrap caret als niet gewenst */
+}
+
+.dropdown-menu {
+    background-color: #333; /* Match navbar */
+    border: 1px solid #444; /* Iets lichtere border */
+}
+
+.dropdown-item {
+    color: #f0f0f0;
+    padding: 10px 20px;
+}
+
+.dropdown-item:hover {
+    background-color: #444;
+    color: #17a2b8;
+}
+
+.dropdown-divider {
+    border-top: 1px solid #444;
+}
+
+/* Specifieke stijl voor de Admin dropdown knop */
+.nav-item.dropdown .nav-link.dropdown-toggle {
+    color: #fff; /* Witte tekstkleur, net als andere nav-links */
+    background-color: transparent; /* Zorg ervoor dat er geen achtergrondkleur van btn-link is */
+    border: none; /* Verwijder eventuele randen van btn-link */
+    padding: 0.5rem 1rem; /* Zorg voor dezelfde padding als nav-links */
+    height: 100%; /* Zorg voor dezelfde hoogte */
+    display: flex; /* Zorg voor dezelfde display eigenschappen */
+    align-items: center; /* Verticaal centreren */
+}
+
+.nav-item.dropdown .nav-link.dropdown-toggle:hover,
+.nav-item.dropdown .nav-link.dropdown-toggle:focus {
+    color: #17a2b8; /* Cyaan kleur bij hover/focus, net als andere nav-links */
+    background-color: transparent;
+    border-bottom: 3px solid #17a2b8; /* Match hover van andere nav-links */
+    box-shadow: none; /* Verwijder eventuele box-shadow van Bootstrap focus */
+}
+
+/* Responsive aanpassingen (voorbeeld) */
+@media screen and (max-width: 960px) {
+    .nav-menu {
+        /* Hier zou je de logica voor een hamburgermenu kunnen plaatsen */
+        /* Voor nu, verberg menu of maak het simpeler */
+        display: none; 
+    }
+    .navbar-user-info {
+        /* Pas alignment aan indien nodig */
+    }
+    .navbar-logo {
+        font-size: 1.8rem;
+    }
+} 

@@ -15,6 +15,7 @@ RetrieverType = Literal["you", "bing", "brave", "serper", "duckduckgo", "tavily"
 class Settings(BaseSettings):
     APP_NAME: str = "Storm WebApp"
     APP_ENV: str = Field(default="local", env="APP_ENV") # Default naar 'local' als niet gezet
+    API_V1_STR: str = "/api/v1"
 
     # Pad definities
     _DATABASE_URL_DOCKER: str = "sqlite:////data/database/storm_app.db"

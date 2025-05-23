@@ -26,7 +26,7 @@ function UserManagementPage() {
         setError(null);
         try {
             // Gebruik nu de gecentraliseerde fetchWithAuth
-            const data = await fetchWithAuth('/admin/users/', { method: 'GET' }, logoutAction);
+            const data = await fetchWithAuth('/api/v1/admin/users/', { method: 'GET' }, logoutAction);
             setUsers(data || []);
         } catch (err) {
             setError(err.message);
@@ -52,7 +52,7 @@ function UserManagementPage() {
                 role: newUserRole
             };
             // Gebruik nu de gecentraliseerde fetchWithAuth
-            await fetchWithAuth('/admin/users/', { 
+            await fetchWithAuth('/api/v1/admin/users/', { 
                 method: 'POST', 
                 body: JSON.stringify(newUser) 
             }, logoutAction);

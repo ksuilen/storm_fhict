@@ -13,14 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware # Importeer CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 import os # Nodig voor pad manipulatie
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional, List, Union
 import json
 import shutil # Toegevoegd voor map verwijderen
 
 from .core.config import settings
 from .database import engine, Base, get_db
-from . import models, schemas, crud, security
+from . import models, schemas, crud
+from .core import auth as auth_core # Importeer core.auth
 from .storm_runner import get_storm_runner, STORMWikiRunner # Importeer ook Runner voor type hint
+from .api.v1.endpoints import vouchers as vouchers_endpoint_router # Importeer de voucher router
+from .api.v1.endpoints import login as login_api_router # Importeer de login router
 # Importeer STORMWikiRunner alleen voor type hinting, niet voor directe call
 if TYPE_CHECKING:
     from knowledge_storm import STORMWikiRunner
@@ -62,11 +65,14 @@ app.add_middleware(
 # --- Startup Event --- (Beter dan direct aanroepen)
 @app.on_event("startup")
 def on_startup():
-    # Controleer of models.Base bestaat en attributen heeft voordat create_all wordt aangeroepen
-    if hasattr(models, 'Base') and hasattr(models.Base, 'metadata'):
-        models.Base.metadata.create_all(bind=engine)
-    else:
-        print("Skipping database creation: models.Base or models.Base.metadata not found.")
+    # Importeer hier app.db.base om zeker te zijn dat alle modellen zijn geladen
+    # op de metadata van de Base uit app.database, voordat create_all wordt aangeroepen.
+    from .db import base  # Zorgt ervoor dat modellen geregistreerd zijn
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("Database tables created successfully (if they didn't exist).")
+    except Exception as e:
+        print(f"Error creating database tables: {e}")
         # Je zou hier specifiekere logging of error handling kunnen toevoegen
 
 
@@ -77,7 +83,7 @@ async def read_root():
 # --- APIRouters ---
 auth_router = APIRouter(tags=["Authentication"])
 users_router = APIRouter(prefix="/users", tags=["Users"])
-admin_router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(security.get_current_active_admin)])
+admin_router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(auth_core.get_current_active_admin)])
 storm_router = APIRouter(prefix="/storm", tags=["Storm"])
 
 # --- User Endpoints ---
@@ -91,26 +97,33 @@ def create_new_user_registration(user: schemas.UserCreate, db: Session = Depends
     return crud.create_user(db=db, user=user)
 
 @users_router.get("/me", response_model=schemas.User)
-async def read_users_me(current_user: models.User = Depends(security.get_current_active_user)):
+async def read_users_me(current_user: models.User = Depends(auth_core.get_current_active_admin)):
     """Get the current logged in user's information."""
     return current_user
 
 # --- Authentication Endpoints ---
-@auth_router.post("/token", response_model=schemas.Token)
+@auth_router.post("/login/access-token", response_model=schemas.Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
     user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not security.verify_password(form_data.password, user.hashed_password):
+    if not user or not auth_core.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # BELANGRIJK: Geef de role mee aan de token data
-    access_token_data = {"sub": user.email, "role": user.role}
-    access_token = security.create_access_token(
+    
+    # Payload aanpassen aan wat AuthContext.js en TokenData schema verwachten
+    access_token_data = {
+        "actor_id": user.id,
+        "actor_email": user.email,
+        "actor_type": "admin", # Expliciet "admin" voor admin login
+        # Je kunt user.role hier ook nog toevoegen als dat nuttig is voor de frontend:
+        "user_role": user.role 
+    }
+    access_token = auth_core.create_access_token(
         data=access_token_data, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
@@ -132,20 +145,30 @@ def read_users_by_admin(skip: int = 0, limit: int = 100, db: Session = Depends(g
     users = crud.get_users(db, skip=skip, limit=limit)
     return users
 
-@admin_router.get("/stats/runs_per_user", response_model=List[schemas.UserRunStats])
-def get_run_stats_per_user_by_admin(db: Session = Depends(get_db)):
-    """Admin endpoint to get run statistics per user."""
-    stats = crud.get_run_count_per_user(db)
-    # Converteer naar UserRunStats schema
-    user_run_stats_list = []
-    for stat_item in stats: # Iterate over each dictionary in the list
-        user_run_stats_list.append(schemas.UserRunStats(
-            user_id=stat_item['user_id'], 
-            email=stat_item['email'], 
-            role=stat_item['role'], 
-            run_count=stat_item['run_count']
-        ))
-    return user_run_stats_list
+@admin_router.get("/stats/overview", response_model=schemas.AdminDashboardStatsSchema)
+async def get_dashboard_statistics(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_core.get_current_active_admin)
+):
+    """Admin endpoint to get an overview of system statistics (vouchers and admin runs)."""
+    voucher_stats_orm = crud.get_voucher_statistics(db, limit=1000) # Krijgt List[models.Voucher]
+    
+    # Converteer voucher ORM objecten naar Pydantic schema objecten
+    voucher_stats_list = [
+        schemas.VoucherStatsSchema.model_validate(voucher) for voucher in voucher_stats_orm
+    ]
+
+    admin_run_stats_raw = crud.get_admin_user_run_counts(db) # Krijgt List[dict]
+    
+    # Converteer admin_run_stats dictionaries naar Pydantic schema objecten
+    admin_run_stats_list = [
+        schemas.AdminUserRunStatSchema(**stat) for stat in admin_run_stats_raw
+    ]
+    
+    return schemas.AdminDashboardStatsSchema(
+        voucher_stats=voucher_stats_list, 
+        admin_run_stats=admin_run_stats_list
+    )
     
 # --- Admin Endpoints voor System Configuration ---
 @admin_router.get("/system-configuration", response_model=schemas.SystemConfigurationResponse)
@@ -171,62 +194,81 @@ def update_system_configuration_endpoint(
     return schemas.SystemConfigurationResponse(config=updated_config)
 
 # --- Storm Background Task ---
-def run_storm_background(db: Session, run_id: int, topic: str, user_id: int):
-    # Hoofdstatus naar running, stage naar INITIALIZING
-    crud.update_storm_run_status(db=db, run_id=run_id, status="running", user_id=user_id)
-    crud.update_storm_run_stage(db=db, run_id=run_id, stage="INITIALIZING", user_id=user_id)
+def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, owner_id: int):
+    db_run = crud.get_storm_run(db, run_id=run_id)
+    if not db_run:
+        print(f"Error in background task: StormRun with id {run_id} not found.")
+        return
 
-    user_specific_output_segment = os.path.join(str(user_id), str(run_id))
+    # Hoofdstatus naar running, stage naar INITIALIZING
+    # Aanname: update_storm_run_status en update_storm_run_stage verwachten nu db_run
+    db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="INITIALIZING")
+    # crud.update_storm_run_stage(db=db, db_run=db_run, stage="INITIALIZING") # update_storm_run_status kan stage ook zetten
+
+    user_specific_output_segment = os.path.join(str(db_run.owner_id), str(db_run.id)) # Gebruik db_run voor owner_id en id
     absolute_output_dir_for_storm_runner = os.path.join(settings.STORM_OUTPUT_DIR, user_specific_output_segment)
     
     try:
         os.makedirs(absolute_output_dir_for_storm_runner, exist_ok=True)
-        crud.update_storm_run_stage(db=db, run_id=run_id, stage="SETUP_COMPLETE", user_id=user_id)
+        db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="SETUP_COMPLETE")
         
-        actual_runner_instance = get_storm_runner() # Deze kan None retourneren als keys missen
+        actual_runner_instance = get_storm_runner()
 
         if actual_runner_instance is None:
-            # Specifieke foutafhandeling als runner initialisatie faalt (bv. API keys missen)
             error_message = "Failed to initialize Storm Runner: Required API key (e.g., OpenAI) might be missing or invalid. Please check system configuration."
-            print(f"Error for run {run_id} (user {user_id}): {error_message}")
-            crud.update_storm_run_stage(db=db, run_id=run_id, stage="RUNNER_INIT_FAILED", user_id=user_id)
-            crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=error_message, user_id=user_id)
-            return # Stop executie van deze background task
-            
-        crud.update_storm_run_stage(db=db, run_id=run_id, stage="RUNNER_INITIALIZED", user_id=user_id)
+            print(f"Error for run {db_run.id} (owner {db_run.owner_type} {db_run.owner_id}): {error_message}")
+            # Aanname: update_storm_run_on_error verwacht nu db_run
+            crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.failed, current_stage="RUNNER_INIT_FAILED", error_message=error_message)
+            return
+
+        db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="RUNNER_INITIALIZED")
         actual_runner_instance.args.output_dir = absolute_output_dir_for_storm_runner
         
-        crud.update_storm_run_stage(db=db, run_id=run_id, stage="STORM_PROCESSING", user_id=user_id)
-        actual_runner_instance.run(topic=topic)
-        crud.update_storm_run_stage(db=db, run_id=run_id, stage="STORM_PROCESSING_DONE", user_id=user_id)
+        db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="STORM_PROCESSING")
+        actual_runner_instance.run(topic=db_run.topic) # Gebruik db_run.topic
+        db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="STORM_PROCESSING_DONE")
         
         try:
-            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING", user_id=user_id)
+            db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="POST_PROCESSING")
             actual_runner_instance.post_run()
-            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING_DONE", user_id=user_id)
+            db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="POST_PROCESSING_DONE")
         except Exception as post_run_exc:
             import traceback
             post_run_error_msg = str(post_run_exc)
             post_run_tb_str = traceback.format_exc()
-            print(f"Warning: Error during post_run for run {run_id} (user {user_id}): {post_run_error_msg}\nTraceback: {post_run_tb_str}")
-            crud.update_storm_run_stage(db=db, run_id=run_id, stage="POST_PROCESSING_FAILED", user_id=user_id)
+            print(f"Warning: Error during post_run for run {db_run.id} (owner {db_run.owner_type} {db_run.owner_id}): {post_run_error_msg}\\nTraceback: {post_run_tb_str}")
+            db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="POST_PROCESSING_FAILED") # Status blijft running, maar stage geeft fout aan
 
         output_dir_to_db = user_specific_output_segment
-        crud.update_storm_run_stage(db=db, run_id=run_id, stage="FINALIZING", user_id=user_id)
-        crud.update_storm_run_on_completion(db=db, run_id=run_id, status="completed", output_dir=output_dir_to_db, user_id=user_id)
-        print(f"Storm run {run_id} for user {user_id} completed. Output in: {absolute_output_dir_for_storm_runner}")
+        db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="FINALIZING")
+        # Aanname: update_storm_run_on_completion verwacht nu db_run en output_dir is een veld ervan of apart
+        # De functie update_storm_run_status handelt al completion statussen af (zet end_time, etc)
+        db_run.output_dir = output_dir_to_db # Zet output_dir op het object
+        crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.completed) # current_stage wordt None gezet door update_storm_run_status
+        
+        # Increment voucher run count ONLY if the run completed successfully AND was owned by a voucher
+        if db_run.status == models.StormRunStatus.completed and db_run.owner_type == "voucher":
+            db_voucher = crud.get_voucher(db, voucher_id=db_run.owner_id) # Haal de voucher op
+            if db_voucher:
+                crud.increment_run_count(db=db, db_voucher=db_voucher)
+                print(f"Successfully incremented run count for voucher {db_voucher.code} for completed run {db_run.id}")
+            else:
+                print(f"Warning: Could not find voucher with id {db_run.owner_id} to increment run count for completed run {db_run.id}")
 
-    except Exception as e: 
-        # Algemene foutafhandeling voor onverwachte errors tijdens de run
-        # Als het niet al de runner initialisatie fout was.
-        if 'actual_runner_instance' in locals() and actual_runner_instance is not None: 
+        print(f"Storm run {db_run.id} for owner {db_run.owner_type} {db_run.owner_id} completed. Output in: {absolute_output_dir_for_storm_runner}")
+
+    except Exception as e:
+        if 'db_run' not in locals(): # Als db_run nog niet is opgehaald
+            print(f"Critical error in background task before run object could be fetched for run_id {run_id}: {e}")
+            return
+
+        # Algemene foutafhandeling
+        if 'actual_runner_instance' in locals() and actual_runner_instance is not None:
             import traceback
             error_msg = str(e)
             tb_str = traceback.format_exc()
-            print(f"Error in Storm run {run_id} for user {user_id} (after runner init): {error_msg}\\nTraceback: {tb_str}")
-            # De stage kan hier al een specifieke fout aangeven, of nog op een processing stage staan
-            # crud.update_storm_run_stage(db=db, run_id=run_id, stage="UNEXPECTED_ERROR", user_id=user_id) # Optioneel
-            crud.update_storm_run_on_error(db=db, run_id=run_id, error_message=f"Unexpected error: {error_msg} - See backend logs.", user_id=user_id)
+            print(f"Error in Storm run {db_run.id} for owner {db_run.owner_type} {db_run.owner_id} (after runner init): {error_msg}\\nTraceback: {tb_str}")
+            crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.failed, error_message=f"Unexpected error: {error_msg} - See backend logs.")
         # Als de fout al was afgehandeld (zoals runner init failed), doe hier niets meer.
 
 # --- Helper functie om een topic string naar een slug te converteren ---
@@ -268,12 +310,46 @@ async def create_storm_run_endpoint(
     storm_request: schemas.StormRunCreate, 
     background_tasks: BackgroundTasks, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor)
 ):
-    new_run = crud.create_storm_run(db=db, topic=storm_request.topic, user_id=current_user.id)
-    background_tasks.add_task(run_storm_background, db, new_run.id, storm_request.topic, current_user.id)
+    # Logic to determine owner_type and owner_id based on current_actor
+    owner_type: str
+    owner_id: int
+    if isinstance(current_actor, models.User):
+        owner_type = "user" # Of "admin" als je dat onderscheid wil maken voor eigenaarschap
+        owner_id = current_actor.id
+        # Hier zou je kunnen checken of de user wel een admin is als dat een vereiste is om runs te starten
+        # if current_actor.role != "admin": 
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can start runs this way.")
+    elif isinstance(current_actor, models.Voucher):
+        if current_actor.used_runs >= current_actor.max_runs:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Voucher has no remaining runs."
+            )
+        # Increment run count for voucher - VERPLAATST NAAR BACKGROUND TASK
+        # crud.increment_run_count(db=db, db_voucher=current_actor) 
+        owner_type = "voucher"
+        owner_id = current_actor.id
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid actor type for starting a run.")
+
+    new_run = crud.create_storm_run(db=db, run_in=storm_request, owner_type=owner_type, owner_id=owner_id)
+    
+    # De run_storm_background functie verwacht nu owner_type en owner_id apart
+    # en output_dir wordt intern in crud.create_storm_run gezet.
+    background_tasks.add_task(
+        run_storm_background, 
+        db=db, 
+        run_id=new_run.id, 
+        topic=new_run.topic, 
+        owner_type=owner_type, 
+        owner_id=owner_id,
+        # user_id is niet meer direct nodig als owner_id en owner_type er zijn.
+        # De background task moet ook aangepast worden om dit te reflecteren.
+    )
     return {
-        "message": f"Storm run for topic '{new_run.topic}' initiated successfully.",
+        "message": f"Storm run for topic '{new_run.topic}' initiated successfully for {owner_type} {owner_id}.",
         "job_id": new_run.id, 
         "topic": new_run.topic, 
         "status": new_run.status, 
@@ -284,48 +360,78 @@ async def create_storm_run_endpoint(
 async def get_storm_run_status(
     job_id: int, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history)
 ):
-    """Get the status of a specific Storm run."""
-    is_admin_check = current_user.role == "admin"
-    db_run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=is_admin_check)
+    # Logic to check if current_actor is authorized to see this job_id
+    db_run = crud.get_storm_run(db, run_id=job_id) # Haal eerst de run op
     if not db_run:
-        raise HTTPException(status_code=404, detail="Storm run not found or not owned by user")
+        raise HTTPException(status_code=404, detail="Storm run not found")
+
+    if isinstance(current_actor, models.User): # Admin
+        # Admin mag elke status zien (of specifieke permissies)
+        pass 
+    elif isinstance(current_actor, models.Voucher): # Voucher
+        if db_run.owner_type != "voucher" or db_run.owner_id != current_actor.id:
+            raise HTTPException(status_code=403, detail="Not authorized to view this storm run status")
+    else:
+        raise HTTPException(status_code=403, detail="Invalid actor type for viewing status")
     
-    # Summary en article content hier niet laden, dat zijn aparte endpoints
     return schemas.StormRunStatusResponse(
         job_id=db_run.id,
         status=db_run.status,
-        current_stage=db_run.current_stage, # Voeg current_stage toe aan de response
+        current_stage=db_run.current_stage,
         topic=db_run.topic,
         start_time=db_run.start_time,
         end_time=db_run.end_time,
-        output_dir=db_run.output_dir,
+        output_dir=db_run.output_dir, # Let op: output_dir kan gevoelige info bevatten, afschermen indien nodig
         error_message=db_run.error_message
     )
 
-@storm_router.get("/history", response_model=List[schemas.StormRunHistoryItem])
+@storm_router.get("/history", response_model=List[schemas.StormRun])
 async def get_storm_run_history(
-    skip: int = 0, limit: int = 20, 
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
-):
-    runs = crud.get_storm_runs_by_user(db, user_id=current_user.id, skip=skip, limit=limit)
+    db: Session = Depends(get_db),
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history),
+    skip: int = 0,
+    limit: int = 100
+) -> list[schemas.StormRun]:
+    runs = []
+    if isinstance(current_actor, models.User): # Admin User
+        # Voor nu: admin ziet alleen eigen runs, net als voorheen. 
+        # Om ALLE runs te zien, gebruik /history/all (die get_current_active_admin behoudt)
+        runs = crud.get_storm_runs_for_owner(db, owner_type="user", owner_id=current_actor.id, skip=skip, limit=limit)
+    elif isinstance(current_actor, models.Voucher):
+        runs = crud.get_storm_runs_for_owner(db, owner_type="voucher", owner_id=current_actor.id, skip=skip, limit=limit)
+    else:
+        # Dit zou niet moeten gebeuren als get_current_actor correct werkt
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized actor type for history")
+    return runs
+
+@storm_router.get("/history/all", response_model=list[schemas.StormRun], dependencies=[Depends(auth_core.get_current_active_admin)])
+async def get_all_storm_run_history_for_admin(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100
+) -> list[schemas.StormRun]:
+    """
+    Retrieve all storm run history. 
+    Only accessible to admins (enforced by dependency).
+    """
+    runs = crud.get_all_storm_runs_for_admin(db, skip=skip, limit=limit)
     return runs
 
 @storm_router.get("/results/{job_id}/summary") # Geeft nu JSON terug, niet FileResponse
 async def get_storm_run_summary_json(
     job_id: int, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history)
 ):
-    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    run = crud.get_storm_run(db, run_id=job_id)
     if not run or not run.output_dir or not run.topic:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
     summary_filename = "url_to_info.json"
     topic_slug = create_topic_slug(run.topic)
-    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, summary_filename)
+    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, summary_filename)
 
     if not file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{summary_filename} not found for run {job_id}")
@@ -382,9 +488,9 @@ async def get_storm_run_summary_json(
 async def get_storm_run_outline_file(
     job_id: int, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history)
 ):
-    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    run = crud.get_storm_run(db, run_id=job_id)
     if not run or not run.output_dir or not run.topic:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
@@ -393,7 +499,7 @@ async def get_storm_run_outline_file(
     topic_slug = create_topic_slug(run.topic)
 
     for filename in possible_filenames:
-        file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, filename)
+        file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, filename)
         if file_path:
             file_path_to_serve = file_path
             break
@@ -408,15 +514,15 @@ async def get_storm_run_outline_file(
 async def get_storm_run_article_file(
     job_id: int, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history)
 ):
-    run = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    run = crud.get_storm_run(db, run_id=job_id)
     if not run or not run.output_dir or not run.topic:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
     article_filename = "storm_gen_article_polished.txt"
     topic_slug = create_topic_slug(run.topic)
-    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.user_id), str(run.id), topic_slug, article_filename)
+    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, article_filename)
 
     if not file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{article_filename} not found for run {job_id}")
@@ -428,19 +534,53 @@ async def get_storm_run_article_file(
 async def delete_storm_run_endpoint(
     job_id: int, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(security.get_current_active_user)
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor)
 ):
-    run_to_delete = crud.get_storm_run(db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    run_to_delete = crud.get_storm_run(db, run_id=job_id)
     if not run_to_delete:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or not authorized to delete")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+
+    # Determine owner_type and owner_id from the run_to_delete object itself,
+    # as current_actor might be an admin deleting someone else's run (if allowed by business logic later).
+    # For now, we strictly check if current_actor is the owner.
+
+    can_delete = False
+    owner_type_for_crud: str = ""
+    owner_id_for_crud: int = 0
+
+    if isinstance(current_actor, models.User):
+        # Assuming admin can delete any run. If admins can only delete their own runs, 
+        # this logic needs to match owner_type="user" and owner_id=current_actor.id
+        # For now, if it's an admin, we fetch the details from the run to be deleted.
+        # However, the crud.delete_storm_run_by_admin might be more appropriate if it exists and is used.
+        # The current error implies crud.delete_storm_run is called, which needs owner_type/id.
+        # Let's assume admin can delete any run, and we use the run's own owner details for the specific delete.
+        # This means an admin is deleting on behalf of the owner technically for the CRUD below.
+        # This part might need refinement based on whether admins bypass owner checks in CRUD.
+        # For a voucher user, it must be their own run.
+        
+        # If an admin is deleting, and delete_storm_run requires owner_type and owner_id of the run itself:
+        owner_type_for_crud = run_to_delete.owner_type
+        owner_id_for_crud = run_to_delete.owner_id
+        can_delete = True # Admins can delete any run
+
+    elif isinstance(current_actor, models.Voucher):
+        if run_to_delete.owner_type == "voucher" and run_to_delete.owner_id == current_actor.id:
+            owner_type_for_crud = "voucher"
+            owner_id_for_crud = current_actor.id
+            can_delete = True
+        else:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this run")
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid actor type for deletion")
+
+    if not can_delete:
+        # This case should ideally be caught by the logic above, but as a fallback:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Deletion not permitted for this actor and run combination.")
 
     # Verwijder de output directory als deze bestaat en een pad heeft
     if run_to_delete.output_dir:
-        # run_to_delete.output_dir is user_id/run_id
-        # We moeten dit combineren met settings.STORM_OUTPUT_DIR
-        dir_to_delete = os.path.join(settings.STORM_OUTPUT_DIR, str(run_to_delete.user_id), str(run_to_delete.id))
-        # Extra veiligheidscheck: zorg dat we niet de root output dir verwijderen
-        # en dat het pad daadwerkelijk overeenkomt met wat we verwachten te verwijderen.
+        dir_to_delete = os.path.join(settings.STORM_OUTPUT_DIR, str(run_to_delete.owner_id), str(run_to_delete.id))
         normalized_base_dir = os.path.realpath(settings.STORM_OUTPUT_DIR)
         normalized_dir_to_delete = os.path.realpath(dir_to_delete)
 
@@ -450,12 +590,9 @@ async def delete_storm_run_endpoint(
             try:
                 shutil.rmtree(normalized_dir_to_delete)
                 print(f"Deleted output directory for run: {normalized_dir_to_delete}")
-
-                # Check if the parent user directory (e.g., storm_output/<user_id>/) is now empty
                 user_dir_path = os.path.dirname(normalized_dir_to_delete)
-                # Make sure user_dir_path is still within STORM_OUTPUT_DIR and not STORM_OUTPUT_DIR itself
                 if user_dir_path.startswith(normalized_base_dir) and user_dir_path != normalized_base_dir:
-                    if not os.listdir(user_dir_path): # Check if empty
+                    if not os.listdir(user_dir_path):
                         try:
                             os.rmdir(user_dir_path)
                             print(f"Deleted empty user directory: {user_dir_path}")
@@ -463,23 +600,29 @@ async def delete_storm_run_endpoint(
                             print(f"Error deleting empty user directory {user_dir_path}: {e.strerror}")
                     else:
                         print(f"User directory {user_dir_path} is not empty, not deleting.")
-
             except OSError as e:
                 print(f"Error deleting directory {normalized_dir_to_delete}: {e.strerror}")
-                # Niet fatale fout, ga door met verwijderen uit DB
         else:
             print(f"Skipped deleting directory: {dir_to_delete} (Path issue or not found)")
             
-    crud.delete_storm_run(db=db, run_id=job_id, user_id=current_user.id, is_admin=current_user.role == 'admin')
+    # Perform the delete operation using the determined owner_type and owner_id
+    deleted_run_db_obj = crud.delete_storm_run(db=db, run_id=job_id, owner_type=owner_type_for_crud, owner_id=owner_id_for_crud)
+    
+    if not deleted_run_db_obj:
+        # This might happen if the run was already deleted by another process, or if owner details didn't match
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or deletion failed in CRUD operation")
+
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # --- Routers toevoegen aan de app ---
 # Belangrijk: de volgorde kan uitmaken als je path overlaps hebt, maar hier niet direct het geval.
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(admin_router)
-app.include_router(storm_router)
+app.include_router(auth_router, prefix=settings.API_V1_STR)
+app.include_router(login_api_router.router, prefix=settings.API_V1_STR)
+app.include_router(users_router, prefix=settings.API_V1_STR)
+app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(storm_router, prefix=settings.API_V1_STR)
+app.include_router(vouchers_endpoint_router.router, prefix=f"{settings.API_V1_STR}/vouchers", tags=["Vouchers"])
 
 # Als laatste redmiddel, voor endpoints die nergens matchen (kan helpen bij debuggen)
 # @app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])

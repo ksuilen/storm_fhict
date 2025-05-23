@@ -8,16 +8,28 @@ import RegistrationPage from './pages/RegistrationPage';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
+import VoucherManagementPage from './pages/admin/VoucherManagementPage';
 import './App.css';
 import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
 import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
 
-const PrivateRoute = ({ children }) => {
-    const { user, isLoading } = useAuth();
-    if (isLoading) {
+const PrivateRoute = ({ children, adminOnly = false }) => {
+    const { user, loading, actorType } = useAuth();
+
+    if (loading) {
         return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Authenticatie controleren...</p></div>;
     }
-    return user ? children : <Navigate to="/login" replace />;
+
+    if (!user) {
+        return <Navigate to="/login" replace />;
+    }
+
+    if (adminOnly && actorType !== 'admin') {
+        // console.log("User is not admin, redirecting from admin route. Actor type:", actorType);
+        return <Navigate to="/" replace />; // Redirect non-admins from admin routes
+    }
+    
+    return children;
 };
 
 const HomeRoute = () => {
@@ -30,7 +42,7 @@ const HomeRoute = () => {
 
 // Nieuwe AdminRoute component
 const AdminRoute = ({ children }) => {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading, actorType } = useAuth();
     // Voeg window.location.pathname toe aan de logs voor context
     // console.log(`AdminRoute Check: Path='${window.location.pathname}', isLoading=${isLoading}, User Loaded=${!!user}, User Role=${user?.role}`);
 
@@ -42,8 +54,8 @@ const AdminRoute = ({ children }) => {
         // console.log(`AdminRoute Decision: Path='${window.location.pathname}', No user, redirecting to /login.`);
         return <Navigate to="/login" replace />;
     }
-    if (user.role !== 'admin') {
-        // console.log(`AdminRoute Decision: Path='${window.location.pathname}', User role is '${user.role}', not 'admin'. Redirecting to /dashboard.`);
+    if (actorType !== 'admin') { 
+        // console.log(`AdminRoute Decision: Path='${window.location.pathname}', actorType is '${actorType}', not 'admin'. Redirecting to /dashboard.`);
         return <Navigate to="/dashboard" replace />;
     }
     // console.log(`AdminRoute Decision: Path='${window.location.pathname}', User is admin. Rendering children.`);
@@ -135,7 +147,7 @@ const formatArticleContentForReadability = (text) => {
 // --- Dashboard Component ---
 // (Dit kan ook in een apart bestand staan, bv. pages/DashboardPage.js)
 function Dashboard() {
-    const { logoutAction, user, isLoading: authIsLoading } = useAuth();
+    const { logoutAction, user, isLoading: authIsLoading, refreshActorDetails, getRemainingRuns } = useAuth();
     const [runs, setRuns] = useState([]);
     const [selectedRun, setSelectedRun] = useState(null);
     const [articleContent, setArticleContent] = useState('');
@@ -150,7 +162,6 @@ function Dashboard() {
     // console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
 
     const pollIntervalRef = React.useRef(null);
-    const initialHistoryFetchAttempted = React.useRef(false); // Ref om initiële fetch te volgen
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
@@ -167,7 +178,7 @@ function Dashboard() {
             return;
         }
         try {
-            const data = await fetchWithAuth('/storm/history', { method: 'GET' }, logoutAction);
+            const data = await fetchWithAuth('/api/v1/storm/history', { method: 'GET' }, logoutAction);
             setRuns(data || []); // Zorg ervoor dat runs altijd een array is
         } catch (err) {
             console.error("Failed to fetch run history:", err);
@@ -176,6 +187,14 @@ function Dashboard() {
             }
         }
     }, [logoutAction, user, authIsLoading]);
+
+    useEffect(() => {
+        if (user && !authIsLoading) { // Fetch when user is available and auth is no longer loading
+            fetchRunHistory();
+        } else if (!user && !authIsLoading) { // Clear runs if no user and auth settled
+            setRuns([]);
+        }
+    }, [user, authIsLoading, fetchRunHistory]);
 
     const fetchRunDetails = useCallback(async (runId, latestStatusData = null) => {
         // const currentRuns = runs; // runs kan verouderd zijn direct na een setRuns
@@ -211,15 +230,15 @@ function Dashboard() {
         try {
             // Fetch article, outline, and sources in parallel
             const [articleData, outlineData, sourcesData] = await Promise.all([
-                fetchWithAuth(`/storm/results/${runId}/article`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/api/v1/storm/results/${runId}/article`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e; // Hergooi voor centrale afhandeling
                     console.error('Article fetch error:', e); return 'Kon artikel niet laden.'; 
                 }),
-                fetchWithAuth(`/storm/results/${runId}/outline`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/api/v1/storm/results/${runId}/outline`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e;
                     console.error('Outline fetch error:', e); return 'Kon inhoudsopgave niet laden.'; 
                 }),
-                fetchWithAuth(`/storm/results/${runId}/summary`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/api/v1/storm/results/${runId}/summary`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e;
                     console.error('Sources fetch error:', e); return []; 
                 })
@@ -294,117 +313,71 @@ function Dashboard() {
         }
     }, [runs, logoutAction, selectedRun]);
 
-    const fetchRunStatus = useCallback(async (jobId) => {
-        try {
-            const statusData = await fetchWithAuth(`/storm/status/${jobId}`, { method: 'GET' }, logoutAction);
-
-            setRuns(prevRuns => {
-                const runIndex = prevRuns.findIndex(run => run.id === jobId);
-                if (runIndex === -1) return prevRuns;
-                
-                const currentRunInList = prevRuns[runIndex];
-                // Check of status of current_stage daadwerkelijk gewijzigd is
-                if (currentRunInList.status === statusData.status && 
-                    currentRunInList.current_stage === statusData.current_stage && 
-                    currentRunInList.error_message === statusData.error_message) {
-                    return prevRuns; 
-                }
-                
-                const newRuns = [...prevRuns];
-                newRuns[runIndex] = { 
-                    ...currentRunInList, 
-                    status: statusData.status,
-                    current_stage: statusData.current_stage, // Sla current_stage op
-                    error_message: statusData.error_message
-                };
-                return newRuns;
-            });
-
-            setSelectedRun(prevSelected => {
-                if (prevSelected && prevSelected.id === jobId) {
-                    // Check of status of current_stage daadwerkelijk gewijzigd is
-                    if (statusData && (prevSelected.status !== statusData.status || 
-                                      prevSelected.current_stage !== statusData.current_stage || 
-                                      prevSelected.error_message !== statusData.error_message)) {
-                        const newState = {
-                            ...prevSelected,
-                            ...(statusData || {}),
-                            id: prevSelected.id, 
-                            topic: prevSelected.topic || (statusData?.topic || "Unknown Topic"),
-                            current_stage: statusData.current_stage // Sla current_stage op
-                        };
-                        delete newState.job_id;
-                        return newState;
-                    }
-                    return prevSelected; 
-                }
-                return prevSelected; 
-            });
-
-            if (statusData && statusData.job_id === jobId && statusData.status === 'completed') {
-                if (selectedRun && selectedRun.id === jobId) { 
-                    fetchRunDetails(jobId, statusData); 
-                }
-            }
-
-            if (statusData.status === 'completed' || statusData.status === 'failed' || statusData.status === 'error' || statusData.status === 'cancelled') {
-                if (pollIntervalRef.current) { 
-                     stopPolling(); 
-                }
-            }
-        } catch (err) {
-            console.error(`Failed to fetch status for job ${jobId}:`, err);
-        }
-    }, [selectedRun, fetchRunDetails, stopPolling, logoutAction]);
-
-    const startPolling = useCallback((jobId) => {
-        // console.log(`Attempting to start polling for job ${jobId}. Current pollIntervalRef: ${pollIntervalRef.current}`);
-        stopPolling(); 
-        // console.log(`Starting polling for job ${jobId} after stopPolling.`);
-        fetchRunStatus(jobId); 
-        pollIntervalRef.current = setInterval(() => {
-            fetchRunStatus(jobId);
-        }, 5000); 
-    }, [fetchRunStatus, stopPolling]); 
-    
-    // --- Effect Hooks ---
     useEffect(() => {
-        // Als auth nog laadt, doe nog niets.
-        if (authIsLoading) {
-            // console.log("Dashboard useEffect: Auth is loading, skipping history fetch logic.");
-            return () => stopPolling();
-        }
+        // Functie om polling te starten voor de geselecteerde run
+        const startPolling = (runId) => {
+            stopPolling(); // Stop eventuele vorige polls
 
-        if (user) {
-            // Gebruiker is ingelogd
-            if (!initialHistoryFetchAttempted.current) {
-                // console.log("Dashboard useEffect: User logged in, initial fetch attempt.");
-                fetchRunHistory();
-                initialHistoryFetchAttempted.current = true;
-            }
+            pollIntervalRef.current = setInterval(async () => {
+                try {
+                    // console.log(`Polling for status of run ${runId}...`);
+                    const statusData = await fetchWithAuth(`/api/v1/storm/status/${runId}`, { method: 'GET' }, logoutAction);
+                    
+                    // Update de run in de 'runs' lijst
+                    setRuns(prevRuns => prevRuns.map(r => r.id === runId ? { ...r, ...statusData } : r));
+
+                    // Update ook de selectedRun als deze overeenkomt, met de NIEUWSTE data.
+                    setSelectedRun(prevSelectedRun => {
+                        if (prevSelectedRun && prevSelectedRun.id === runId) {
+                            const previousStatus = prevSelectedRun.status; // Status *voor* deze update
+                            
+                            // Als de nieuwe status 'completed' is en de vorige niet, trigger acties
+                            if (statusData.status === 'completed' && previousStatus !== 'completed') {
+                                console.log(`Run ${runId} completed. Fetching details and refreshing actor info.`);
+                                fetchRunDetails(runId, statusData); // Laad artikel, outline etc. met de verse statusData
+                                if (refreshActorDetails) refreshActorDetails(); // Refresh voucher/admin info
+                                stopPolling(); 
+                            } else if (statusData.status === 'failed' || statusData.status === 'cancelled') {
+                                console.log(`Run ${runId} ${statusData.status}. Stopping polling, fetching details.`);
+                                fetchRunDetails(runId, statusData); // Ook bij fail/cancel details (bv. error message) laden.
+                                stopPolling();
+                            }
+                            return { ...prevSelectedRun, ...statusData }; // Return de geupdatete state
+                        }
+                        return prevSelectedRun; // Geen wijziging als de ID niet matcht
+                    });
+
+                } catch (error) {
+                    console.error(`Error polling status for run ${runId}:`, error);
+                    if (error.message !== 'Unauthorized' && error.message !== "Failed to fetch") { // Voorkom error spam bij logout/netwerkissues
+                        setError(`Fout bij ophalen status run ${runId}: ${error.message}`);
+                    }
+                    // Overweeg polling te stoppen bij bepaalde (niet-auth) fouten om loops te voorkomen
+                    // Bijv. als error.message wijst op een serverfout die niet snel herstelt.
+                    // stopPolling(); 
+                }
+            }, 5000); // Poll elke 5 seconden
+        };
+
+        if (selectedRun && (selectedRun.status === 'pending' || selectedRun.status === 'running')) {
+            // console.log(`Starting polling for selected run ${selectedRun.id} with status ${selectedRun.status}`);
+            startPolling(selectedRun.id);
         } else {
-            // Geen gebruiker (uitgelogd), reset de fetch poging flag.
-            // console.log("Dashboard useEffect: No user, resetting initial fetch flag.");
-            initialHistoryFetchAttempted.current = false;
-            setRuns([]); // Leeg de runs als de gebruiker uitlogt
-            setSelectedRun(null); // Deselecteer run
-            setArticleContent('');
-            setOutlineContent('');
-            setSources([]);
+            // console.log("Selected run is not pending or running, or no run selected. Stopping polling.");
+            stopPolling();
         }
 
         return () => {
-            // console.log("Dashboard useEffect cleanup: Stopping polling.");
             stopPolling();
         };
-    }, [stopPolling, authIsLoading, user, fetchRunHistory]);
+    }, [selectedRun, logoutAction, stopPolling, fetchRunDetails, refreshActorDetails]); // refreshActorDetails toegevoegd als dependency
 
     // --- Event Handlers ---
      const handleRunSelect = (run) => {
         stopPolling(); // Stop polling als we een andere run selecteren
         setSelectedRun(run);
         if (run.status === 'running' || run.status === 'pending') {
-            startPolling(run.id);
+            // startPolling(run.id); // This call is removed as useEffect [selectedRun] handles polling initiation
             setArticleContent(''); // Clear details for running job
             setOutlineContent('');
             setSources([]);
@@ -428,7 +401,7 @@ function Dashboard() {
         stopPolling(); // Stop polling van vorige runs
 
         try {
-            const newRunDataFromApi = await fetchWithAuth('/storm/run', {
+            const newRunDataFromApi = await fetchWithAuth('/api/v1/storm/run', {
                 method: 'POST',
                 body: JSON.stringify({ topic: topic })
             }, logoutAction);
@@ -464,7 +437,7 @@ function Dashboard() {
         stopPolling(); // Stop polling als we gaan verwijderen
 
         try {
-            await fetchWithAuth(`/storm/run/${runId}`, { method: 'DELETE' }, logoutAction);
+            await fetchWithAuth(`/api/v1/storm/run/${runId}`, { method: 'DELETE' }, logoutAction);
             
             // Verwijder uit de lijst
             setRuns(prevRuns => prevRuns.filter(run => run.id !== runId));
@@ -569,7 +542,11 @@ function Dashboard() {
                             disabled={isSubmitting}
                         />
                     </div>
-                    <button type="submit" className="btn btn-primary w-100" disabled={!topic.trim() || isSubmitting}> {/* Bootstrap button */}
+                    <button 
+                        type="submit" 
+                        className="btn btn-primary w-100" 
+                        disabled={!topic.trim() || isSubmitting || (user && user.actor_type === 'voucher' && getRemainingRuns() <= 0)}
+                    > 
                         {isSubmitting ? (
                              <><span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Starten...</> 
                         ) : 'Start Run'}
@@ -746,6 +723,53 @@ function Dashboard() {
 }
 
 function App() {
+    const { /* user, actorType, isLoading, */ token, logout } = useAuth(); // Haal logout op uit useAuth
+    // const [runHistory, setRunHistory] = useState([]);
+    // const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    // const [errorHistory, setErrorHistory] = useState(null);
+
+    // Navigatie items
+    // const commonNavItems = [
+    //     { path: "/dashboard", label: "Dashboard" },
+    // ];
+    // const adminNavItems = [
+    //     ...commonNavItems,
+    //     { path: "/admin/vouchers", label: "Voucher Management" },
+    //     { path: "/admin/users", label: "User Management" }, 
+    //     { path: "/admin/system-settings", label: "System Settings" },
+    //     { path: "/admin/run-history-all", label: "All Run History" },
+    // ];
+    // const voucherNavItems = [
+    //     ...commonNavItems,
+    //     // Vouchers zien hun eigen history op het dashboard of een /my-history pagina
+    // ];
+
+    // const currentNavItems = actorType === 'admin' ? adminNavItems : (actorType === 'voucher' ? voucherNavItems : commonNavItems);
+
+    const fetchRunHistory = useCallback(async () => {
+        if (!token) return;
+        // setIsLoadingHistory(true);
+        // setErrorHistory(null);
+        try {
+            // Admins en Vouchers gebruiken hetzelfde /storm/history endpoint nu.
+            // De backend differentieert op basis van de token (actor_type).
+            const historyData = await fetchWithAuth('/api/v1/storm/history', { method: 'GET' }, logout); // Geef logout mee
+            // setRunHistory(historyData || []);
+            console.log("Fetched history data:", historyData); // Tijdelijke log om te zien of data binnenkomt
+        } catch (err) {
+            console.error("Failed to fetch run history:", err);
+            // setErrorHistory(err.message || "Failed to load run history.");
+            // Als de error door logout komt, hoeft hier niet nogmaals gelogd te worden, fetchWithAuth doet dat al.
+        }
+        // setIsLoadingHistory(false);
+    }, [token, logout]); // Voeg logout toe aan dependency array
+
+    useEffect(() => {
+        if (token /* && (actorType === 'admin' || actorType === 'voucher') */) { // Fetch for both types if logged in
+            fetchRunHistory();
+        }
+    }, [token, /* actorType, */ fetchRunHistory]);
+
     return (
         <Router>
             <AuthProvider>
@@ -786,6 +810,14 @@ function App() {
                                 <AdminRoute>
                                     <AdminSystemSettingsPage />
                                 </AdminRoute>
+                            }
+                        />
+                        <Route 
+                            path="/admin/vouchers"
+                            element={
+                                <PrivateRoute adminOnly={true}>
+                                    <VoucherManagementPage />
+                                </PrivateRoute>
                             }
                         />
                         <Route path="*" element={<Navigate to="/" replace />} />

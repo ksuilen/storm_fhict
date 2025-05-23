@@ -1,0 +1,19 @@
+/* VoucherManagementPage.css - Greatly reduced as styles now primarily come from React-Bootstrap */
+
+/* 
+  Retain any absolutely essential custom overrides or very specific styles here if needed. 
+  For example, if you need a specific max-width for the main container on this page 
+  that differs from typical Bootstrap container behavior, or very specific table cell adjustments.
+*/
+
+/* Example of a page-specific container style if needed:
+.voucher-management-container {
+    max-width: 1140px; 
+    margin: auto;
+}
+*/
+
+/* Minimal custom styling for action buttons in table if Bootstrap defaults aren't enough */
+/* .table td .btn-info {
+    margin-right: 0.5rem; 
+} */ 
