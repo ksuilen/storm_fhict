@@ -40,9 +40,9 @@ function Navbar() {
                         {/* Admin dropdown, alleen zichtbaar als user admin is */} 
                         {user && user.role === 'admin' && (
                             <li className="nav-item dropdown">
-                                <a className="nav-link dropdown-toggle" href="javascript:void(0);" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button className="nav-link dropdown-toggle btn btn-link" type="button" id="adminDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     Admin
-                                </a>
+                                </button>
                                 <ul className="dropdown-menu" aria-labelledby="adminDropdown">
                                     <li><Link className="dropdown-item" to="/admin/users">User Management</Link></li>
                                     <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
@@ -73,9 +73,9 @@ function Navbar() {
                     <ul className="navbar-nav mb-2 mb-lg-0">
                         {user ? (
                             <li className="nav-item dropdown">
-                                <a className="nav-link dropdown-toggle" href="javascript:void(0);" id="navbarUserDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button className="nav-link dropdown-toggle btn btn-link" type="button" id="navbarUserDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     {user.email}
-                                </a>
+                                </button>
                                 <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="navbarUserDropdown">
                                     <li><button className="dropdown-item" onClick={handleLogout}>Logout</button></li>
                                 </ul>

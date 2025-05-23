@@ -92,6 +92,7 @@ This application aims to make the power of STORM accessible through an intuitive
     ```bash
     npm install
     ```
+    **Opmerking:** Als je recent de PDF download functionaliteit hebt toegevoegd, zorg ervoor dat `html2pdf.js` is geïnstalleerd door opnieuw `npm install` uit te voeren.
 5.  Start the development server:
     ```bash
     npm start
@@ -170,8 +171,75 @@ This project is configured to run with Docker Compose, which simplifies setup an
     docker-compose down -v
     ```
 
+### Bouwen van Multi-Platform Images voor Deployment
+
+Als je de applicatie wilt deployen op een server (zoals een Portainer-omgeving) die een andere CPU-architectuur heeft dan je ontwikkelmachine (bijvoorbeeld je bouwt op een Mac met Apple Silicon/ARM64, maar de server is Linux/AMD64), dan moet je multi-platform images bouwen. Doe je dit niet, dan kun je fouten krijgen zoals `no matching manifest for linux/amd64 in the manifest list entries`.
+
+Docker `buildx` wordt gebruikt om deze multi-platform images te creëren en direct naar je Docker registry te pushen.
+
+1.  **Log in bij je Docker Registry** (vervang `your-registry.com` en `your-username`):
+    ```bash
+    docker login your-registry.com -u your-username
+    ```
+
+2.  **Bouw en push de backend image** (vervang `your-registry.com/your-repo/your-app-backend:latest`):
+    ```bash
+    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/your-app-backend:latest --push ./backend
+    ```
+    *Opmerking*: Als de `pip install` stap voor het `linux/amd64` platform lang duurt en faalt met een `ReadTimeoutError`, verhoog dan de timeout in `backend/Dockerfile` (bijv. `RUN pip install --timeout 600 --no-cache-dir -r requirements.txt`).
+
+3.  **Bouw en push de frontend image** (vervang `your-registry.com/your-repo/your-app-frontend:latest`):
+    ```bash
+    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/your-app-frontend:latest --push ./frontend/app
+    ```
+
+Nu zijn je images klaar in de registry voor de deployment.
+
+## Deployment naar Portainer (of andere Docker-omgeving)
+
+Nadat je de multi-platform images naar je Docker registry hebt gepusht, kun je de applicatie deployen.
+
+1.  **Configureer je Registry in Portainer:**
+    *   Ga in Portainer naar "Registries" en voeg je private Docker registry toe met de benodigde credentials.
+
+2.  **Maak een nieuwe Stack in Portainer:**
+    *   Gebruik de volgende aangepaste `docker-compose.yml`. Deze versie gebruikt de `image:` directive om te verwijzen naar de images in je registry, in plaats van ze lokaal te bouwen.
+
+    ```yaml
+    services:
+      backend:
+        image: your-registry.com/your-repo/your-app-backend:latest # VERVANG DIT
+        environment:
+          - APP_ENV=docker
+          # VOORBEELD: SECRET_KEY=jouw_geheime_sleutel_hier
+          # BELANGRIJK: Stel TAVILY_API_KEY, OPENAI_API_KEY, SECRET_KEY, etc.
+          # in via de Portainer UI (Environment variables sectie van de stack).
+        volumes:
+          - storm_db_data:/data/database # Zorgt voor persistentie van de database
+          - storm_output_data:/data/storm_output # Zorgt voor persistentie van outputs
+        restart: unless-stopped
+
+      frontend:
+        image: your-registry.com/your-repo/your-app-frontend:latest # VERVANG DIT
+        ports:
+          - "80:80" # HOST_PORT:CONTAINER_PORT (bijv. "3000:80" om op poort 3000 te draaien)
+        depends_on:
+          - backend
+        restart: unless-stopped
+
+    volumes:
+      storm_db_data:
+      storm_output_data:
+    ```
+
+3.  **Stel Environment Variabelen in Portainer in:**
+    *   **Cruciaal:** In de Portainer UI, bij het aanmaken of bewerken van de stack, ga naar de sectie "Environment variables". Voeg hier alle benodigde variabelen toe voor de `backend` service, zoals `SECRET_KEY`, `OPENAI_API_KEY`, `TAVILY_API_KEY`, en eventuele andere configuraties die je backend nodig heeft.
+    *   Voor de `frontend` service kun je hier eventueel de host-poort specificeren als je die niet hardcodeert in de `ports` sectie van de YAML hierboven (bijv. door een `FRONTEND_HOST_PORT` variabele te gebruiken en in de YAML `- "${FRONTEND_HOST_PORT:-80}:80"` te zetten).
+
+4.  **Deploy de Stack.**
+
 ## Development Notes
 
--   The database (`sql_app.db`) is automatically created/updated on backend startup using SQLAlchemy\'s `create_all`. For production, consider using Alembic for migrations.
+-   De database (`sql_app.db`) is automatisch aangemaakt/bijgewerkt bij de backend startup met SQLAlchemy\'s `create_all`. Voor productie, overweeg Alembic voor migraties.
 -   CORS is configured in the backend to allow requests from `http://localhost:3000`.
 -   See [TODO.md](TODO.md) for the current list of pending tasks and potential improvements. 

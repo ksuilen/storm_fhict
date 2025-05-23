@@ -10,6 +10,7 @@ import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
 import './App.css';
 import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
+import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
 
 const PrivateRoute = ({ children }) => {
     const { user, isLoading } = useAuth();
@@ -97,6 +98,40 @@ const getDynamicStatusBadgeClass = (status, stage = null) => {
     }
 };
 
+// Helper functie om artikelcontent op te delen voor betere leesbaarheid
+const formatArticleContentForReadability = (text) => {
+    if (!text || typeof text !== 'string') {
+        return text;
+    }
+
+    // Split eerst in bestaande paragrafen (dubbele newline)
+    const paragraphs = text.split(/\n\n+/);
+    const newParagraphs = [];
+
+    paragraphs.forEach(paragraph => {
+        // Probeer verder op te splitsen als een paragraaf erg lang is.
+        // Regex om zinnen te matchen die eindigen op ., !, ? gevolgd door spatie of einde string.
+        const sentences = paragraph.match(/[^.!?]+[.!?](\s+|$)/g);
+
+        if (sentences && sentences.length > 4) { // Arbitraire grens, bv. meer dan 4 zinnen
+            let currentNewParagraph = '';
+            for (let i = 0; i < sentences.length; i++) {
+                currentNewParagraph += sentences[i];
+                // Groepeer per 2-3 zinnen, of als het de laatste zin van de originele paragraaf is.
+                if ((i + 1) % 3 === 0 || i === sentences.length - 1) {
+                    newParagraphs.push(currentNewParagraph.trim());
+                    currentNewParagraph = '';
+                }
+            }
+        } else {
+            // Korte paragrafen of paragrafen die niet goed in zinnen te splitsen zijn, blijven intact.
+            newParagraphs.push(paragraph);
+        }
+    });
+
+    return newParagraphs.join('\n\n');
+};
+
 // --- Dashboard Component ---
 // (Dit kan ook in een apart bestand staan, bv. pages/DashboardPage.js)
 function Dashboard() {
@@ -110,6 +145,7 @@ function Dashboard() {
     const [error, setError] = useState(null);
     const [topic, setTopic] = useState(''); // State voor nieuw run topic
     const [isSubmitting, setIsSubmitting] = useState(false); // State voor submit knop
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
     // console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
 
@@ -451,6 +487,69 @@ function Dashboard() {
         }
     };
 
+    const handleDownloadPdf = async () => {
+        if (!selectedRun || !articleContent) return;
+        setIsDownloadingPdf(true);
+
+        const articleElement = document.querySelector('.article-content');
+        const sourcesElement = document.querySelector('.sources-list');
+
+        if (!articleElement) {
+            console.error("Article element not found for PDF generation.");
+            setIsDownloadingPdf(false);
+            return;
+        }
+
+        // Creëer een container div om beide elementen in te stoppen voor de PDF
+        const container = document.createElement('div');
+        
+        // Titel voor het artikel
+        const titleElement = document.createElement('h1');
+        titleElement.innerText = selectedRun.topic || "Gegenereerd Artikel";
+        container.appendChild(titleElement);
+
+        // Kloon het artikel en de bronnen om de originele weergave niet te beïnvloeden
+        const clonedArticle = articleElement.cloneNode(true);
+        clonedArticle.style.maxHeight = 'none'; // Verwijder maxHeight voor PDF
+        container.appendChild(clonedArticle);
+
+        if (sourcesElement && sources.length > 0) {
+            const sourcesTitleElement = document.createElement('h2');
+            sourcesTitleElement.innerText = "Bronnen";
+            sourcesTitleElement.style.marginTop = '20px';
+            container.appendChild(sourcesTitleElement);
+            
+            const clonedSources = sourcesElement.cloneNode(true);
+            clonedSources.style.maxHeight = 'none'; // Verwijder maxHeight voor PDF
+            clonedSources.style.listStyleType = 'decimal'; // Zorg voor nummering in PDF
+            // Maak links volledig zichtbaar
+            Array.from(clonedSources.getElementsByTagName('a')).forEach(a => {
+                a.innerText = a.href;
+            });
+            container.appendChild(clonedSources);
+        }
+        
+        // Opties voor html2pdf
+        const pdfFilename = `${selectedRun.topic ? selectedRun.topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'artikel'}_${selectedRun.id}.pdf`;
+        const opt = {
+            margin:       1,
+            filename:     pdfFilename,
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true, logging: false }, // useCORS kan nodig zijn voor externe afbeeldingen (niet van toepassing hier)
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
+            pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        try {
+            await html2pdf().from(container).set(opt).save();
+        } catch (pdfError) {
+            console.error("Error generating PDF:", pdfError);
+            setError("Fout bij het genereren van de PDF.");
+        } finally {
+            setIsDownloadingPdf(false);
+        }
+    };
+
     // --- Render JSX ---
     return (
         // Gebruik Bootstrap grid system voor layout naast elkaar
@@ -554,8 +653,24 @@ function Dashboard() {
                          )}
 
                         <div className="card shadow-sm mb-3"> {/* Card voor Artikel */}
-                            <div className="card-header">
+                            <div className="card-header d-flex justify-content-between align-items-center">
                                 <h4 className="mb-0">Gegenereerd Artikel</h4>
+                                {selectedRun && selectedRun.status === 'completed' && articleContent && (
+                                    <button 
+                                        className="btn btn-sm btn-outline-primary" 
+                                        onClick={handleDownloadPdf}
+                                        disabled={isDownloadingPdf}
+                                    >
+                                        {isDownloadingPdf ? (
+                                            <>
+                                                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                Downloaden...
+                                            </>
+                                        ) : (
+                                            'Download PDF'
+                                        )}
+                                    </button>
+                                )}
                             </div>
                             <div className="card-body">
                                 <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
@@ -592,7 +707,7 @@ function Dashboard() {
                                         }
                                       }}
                                     >
-                                      {articleContent ? articleContent : 
+                                      {articleContent ? formatArticleContentForReadability(articleContent) : 
                                         (selectedRun && selectedRun.status === 'completed' && !isLoadingDetails ? "Geen artikel beschikbaar." : 
                                         (selectedRun && selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? "Resultaten worden geladen of zijn niet beschikbaar voor deze status." : 
                                         ""))}
