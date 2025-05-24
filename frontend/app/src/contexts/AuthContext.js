@@ -91,9 +91,9 @@ export const AuthProvider = ({ children }) => {
         setError(null);
         let actorDetailsEndpoint = '';
         if (user.actor_type === 'admin') {
-            actorDetailsEndpoint = '/api/v1/users/me';
+            actorDetailsEndpoint = '/v1/users/me';
         } else if (user.actor_type === 'voucher') {
-            actorDetailsEndpoint = '/api/v1/vouchers/me/details';
+            actorDetailsEndpoint = '/v1/vouchers/me/details';
         } else {
             console.error("Cannot refresh actor details: unknown actor type.", user.actor_type);
             setIsRefreshing(false);

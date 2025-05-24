@@ -85,6 +85,87 @@ auth_router = APIRouter(tags=["Authentication"])
 users_router = APIRouter(prefix="/users", tags=["Users"])
 admin_router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(auth_core.get_current_active_admin)])
 storm_router = APIRouter(prefix="/storm", tags=["Storm"])
+debug_router = APIRouter(prefix="/debug", tags=["Debug"])
+
+# --- Debug Endpoints ---
+@debug_router.get("/routes")
+async def debug_routes():
+    """Debug endpoint to see all registered routes"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else [],
+                "name": getattr(route, 'name', 'unnamed')
+            })
+    return {"routes": routes, "api_v1_str": settings.API_V1_STR}
+
+@debug_router.get("/run/{run_id}")
+async def debug_run_info(run_id: int, db: Session = Depends(get_db)):
+    """Debug endpoint to see run details and path construction"""
+    try:
+        db_run = crud.get_storm_run(db, run_id=run_id)
+        if not db_run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        
+        topic_slug = create_topic_slug(db_run.topic) if db_run.topic else "NO_TOPIC"
+        
+        # Constructie zoals gebruikt in API endpoints
+        expected_path_structure = {
+            "base_dir": settings.STORM_OUTPUT_DIR,
+            "owner_id": str(db_run.owner_id),
+            "run_id": str(db_run.id),
+            "topic_slug": topic_slug,
+            "full_path_for_files": os.path.join(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id), topic_slug)
+        }
+        
+        # Constructie zoals gebruikt in background task
+        background_task_path = os.path.join(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id))
+        
+        # Check of directory bestaat
+        paths_exist = {
+            "expected_path_exists": os.path.exists(expected_path_structure["full_path_for_files"]),
+            "background_path_exists": os.path.exists(background_task_path),
+            "output_dir_from_db_exists": os.path.exists(os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir)) if db_run.output_dir else False
+        }
+        
+        # List bestanden
+        files_found = {}
+        if os.path.exists(background_task_path):
+            try:
+                files_found["background_task_path"] = os.listdir(background_task_path)
+            except Exception as e:
+                files_found["background_task_path"] = f"ERROR_LISTING: {str(e)}"
+        
+        if os.path.exists(expected_path_structure["full_path_for_files"]):
+            try:
+                files_found["expected_path"] = os.listdir(expected_path_structure["full_path_for_files"])
+            except Exception as e:
+                files_found["expected_path"] = f"ERROR_LISTING: {str(e)}"
+        
+        return {
+            "run_info": {
+                "id": db_run.id,
+                "topic": db_run.topic,
+                "owner_type": db_run.owner_type,
+                "owner_id": db_run.owner_id,
+                "status": str(db_run.status.value) if hasattr(db_run.status, 'value') else str(db_run.status),
+                "output_dir_from_db": db_run.output_dir
+            },
+            "path_analysis": {
+                "expected_structure": expected_path_structure,
+                "background_task_path": background_task_path,
+                "paths_exist": paths_exist,
+                "files_found": files_found
+            }
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "error": f"Debug endpoint error: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
 
 # --- User Endpoints ---
 @users_router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
@@ -622,6 +703,7 @@ app.include_router(login_api_router.router, prefix=settings.API_V1_STR)
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(storm_router, prefix=settings.API_V1_STR)
+app.include_router(debug_router, prefix=settings.API_V1_STR)
 app.include_router(vouchers_endpoint_router.router, prefix=f"{settings.API_V1_STR}/vouchers", tags=["Vouchers"])
 
 # Als laatste redmiddel, voor endpoints die nergens matchen (kan helpen bij debuggen)

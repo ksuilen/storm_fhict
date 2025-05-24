@@ -54,7 +54,7 @@ function LoginPage() {
             body.append('password', password);
 
             try {
-                const data = await fetchWithAuth('/api/v1/login/access-token', {
+                const data = await fetchWithAuth('/v1/login/access-token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: body,
@@ -67,7 +67,7 @@ function LoginPage() {
             }
         } else { // Voucher login
             try {
-                const data = await fetchWithAuth('/api/v1/login/voucher', {
+                const data = await fetchWithAuth('/v1/login/voucher', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voucher_code: voucherCode }),

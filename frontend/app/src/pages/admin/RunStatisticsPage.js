@@ -19,7 +19,7 @@ function RunStatisticsPage() {
         setError(null);
         try {
             // Roep de nieuwe endpoint aan
-            const data = await fetchWithAuth('/api/v1/admin/stats/overview', { method: 'GET' }, logoutAction);
+            const data = await fetchWithAuth('/v1/admin/stats/overview', { method: 'GET' }, logoutAction);
             if (data) {
                 setVoucherStats(data.voucher_stats || []);
                 setAdminRunStats(data.admin_run_stats || []);

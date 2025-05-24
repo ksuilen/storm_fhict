@@ -178,7 +178,7 @@ function Dashboard() {
             return;
         }
         try {
-            const data = await fetchWithAuth('/api/v1/storm/history', { method: 'GET' }, logoutAction);
+            const data = await fetchWithAuth('/v1/storm/history', { method: 'GET' }, logoutAction);
             setRuns(data || []); // Zorg ervoor dat runs altijd een array is
         } catch (err) {
             console.error("Failed to fetch run history:", err);
@@ -230,15 +230,15 @@ function Dashboard() {
         try {
             // Fetch article, outline, and sources in parallel
             const [articleData, outlineData, sourcesData] = await Promise.all([
-                fetchWithAuth(`/api/v1/storm/results/${runId}/article`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/v1/storm/results/${runId}/article`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e; // Hergooi voor centrale afhandeling
                     console.error('Article fetch error:', e); return 'Kon artikel niet laden.'; 
                 }),
-                fetchWithAuth(`/api/v1/storm/results/${runId}/outline`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/v1/storm/results/${runId}/outline`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e;
                     console.error('Outline fetch error:', e); return 'Kon inhoudsopgave niet laden.'; 
                 }),
-                fetchWithAuth(`/api/v1/storm/results/${runId}/summary`, { method: 'GET' }, logoutAction).catch(e => { 
+                fetchWithAuth(`/v1/storm/results/${runId}/summary`, { method: 'GET' }, logoutAction).catch(e => { 
                     if (e.message === 'Unauthorized') throw e;
                     console.error('Sources fetch error:', e); return []; 
                 })
@@ -321,7 +321,7 @@ function Dashboard() {
             pollIntervalRef.current = setInterval(async () => {
                 try {
                     // console.log(`Polling for status of run ${runId}...`);
-                    const statusData = await fetchWithAuth(`/api/v1/storm/status/${runId}`, { method: 'GET' }, logoutAction);
+                    const statusData = await fetchWithAuth(`/v1/storm/status/${runId}`, { method: 'GET' }, logoutAction);
                     
                     // Update de run in de 'runs' lijst
                     setRuns(prevRuns => prevRuns.map(r => r.id === runId ? { ...r, ...statusData } : r));
@@ -401,7 +401,7 @@ function Dashboard() {
         stopPolling(); // Stop polling van vorige runs
 
         try {
-            const newRunDataFromApi = await fetchWithAuth('/api/v1/storm/run', {
+            const newRunDataFromApi = await fetchWithAuth('/v1/storm/run', {
                 method: 'POST',
                 body: JSON.stringify({ topic: topic })
             }, logoutAction);
@@ -437,7 +437,7 @@ function Dashboard() {
         stopPolling(); // Stop polling als we gaan verwijderen
 
         try {
-            await fetchWithAuth(`/api/v1/storm/run/${runId}`, { method: 'DELETE' }, logoutAction);
+            await fetchWithAuth(`/v1/storm/run/${runId}`, { method: 'DELETE' }, logoutAction);
             
             // Verwijder uit de lijst
             setRuns(prevRuns => prevRuns.filter(run => run.id !== runId));
@@ -753,7 +753,7 @@ function App() {
         try {
             // Admins en Vouchers gebruiken hetzelfde /storm/history endpoint nu.
             // De backend differentieert op basis van de token (actor_type).
-            const historyData = await fetchWithAuth('/api/v1/storm/history', { method: 'GET' }, logout); // Geef logout mee
+            const historyData = await fetchWithAuth('/v1/storm/history', { method: 'GET' }, logout); // Geef logout mee
             // setRunHistory(historyData || []);
             console.log("Fetched history data:", historyData); // Tijdelijke log om te zien of data binnenkomt
         } catch (err) {

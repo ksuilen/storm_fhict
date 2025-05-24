@@ -29,7 +29,7 @@ const VoucherManagementPage = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const data = await fetchWithAuth('/api/v1/vouchers/', { method: 'GET' });
+            const data = await fetchWithAuth('/v1/vouchers/', { method: 'GET' });
             setVouchers(data);
         } catch (err) {
             console.error("Failed to fetch vouchers:", err);
@@ -84,7 +84,7 @@ const VoucherManagementPage = () => {
                 // Prefix is not editable, so not included here
 
                 if (Object.keys(updatePayload).length > 0) {
-                    await fetchWithAuth(`/api/v1/vouchers/${editingVoucher.id}`, {
+                    await fetchWithAuth(`/v1/vouchers/${editingVoucher.id}`, {
                         method: 'PUT',
                         body: JSON.stringify(updatePayload),
                     });
@@ -95,7 +95,7 @@ const VoucherManagementPage = () => {
                     return;
                 }
             } else {
-                await fetchWithAuth('/api/v1/vouchers/', {
+                await fetchWithAuth('/v1/vouchers/', {
                     method: 'POST',
                     body: JSON.stringify(voucherPayload),
                 });
@@ -114,7 +114,7 @@ const VoucherManagementPage = () => {
             setIsLoading(true); // Consider a specific deleting state
             setError(null);
             try {
-                await fetchWithAuth(`/api/v1/vouchers/${voucherId}`, { method: 'DELETE' });
+                await fetchWithAuth(`/v1/vouchers/${voucherId}`, { method: 'DELETE' });
                 fetchVouchers();
             } catch (err) {
                 console.error("Failed to delete voucher:", err);
