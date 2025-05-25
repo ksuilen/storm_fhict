@@ -35,6 +35,7 @@ storm_app.db
 # Environment variables
 .env
 .env.*
+stack.env
 
 # Storm output (user-generated content, typically large and not versioned directly)
 backend/storm_output/

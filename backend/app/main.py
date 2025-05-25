@@ -109,6 +109,7 @@ async def debug_run_info(run_id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Run not found")
         
         topic_slug = create_topic_slug(db_run.topic) if db_run.topic else "NO_TOPIC"
+        actual_topic_dir = find_actual_topic_dir(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id), db_run.topic) if db_run.topic else None
         
         # Constructie zoals gebruikt in API endpoints
         expected_path_structure = {
@@ -116,7 +117,9 @@ async def debug_run_info(run_id: int, db: Session = Depends(get_db)):
             "owner_id": str(db_run.owner_id),
             "run_id": str(db_run.id),
             "topic_slug": topic_slug,
-            "full_path_for_files": os.path.join(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id), topic_slug)
+            "actual_topic_dir": actual_topic_dir,
+            "full_path_for_files": os.path.join(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id), topic_slug),
+            "actual_path_for_files": os.path.join(settings.STORM_OUTPUT_DIR, str(db_run.owner_id), str(db_run.id), actual_topic_dir) if actual_topic_dir else None
         }
         
         # Constructie zoals gebruikt in background task
@@ -125,6 +128,7 @@ async def debug_run_info(run_id: int, db: Session = Depends(get_db)):
         # Check of directory bestaat
         paths_exist = {
             "expected_path_exists": os.path.exists(expected_path_structure["full_path_for_files"]),
+            "actual_path_exists": os.path.exists(expected_path_structure["actual_path_for_files"]) if expected_path_structure["actual_path_for_files"] else False,
             "background_path_exists": os.path.exists(background_task_path),
             "output_dir_from_db_exists": os.path.exists(os.path.join(settings.STORM_OUTPUT_DIR, db_run.output_dir)) if db_run.output_dir else False
         }
@@ -142,6 +146,12 @@ async def debug_run_info(run_id: int, db: Session = Depends(get_db)):
                 files_found["expected_path"] = os.listdir(expected_path_structure["full_path_for_files"])
             except Exception as e:
                 files_found["expected_path"] = f"ERROR_LISTING: {str(e)}"
+        
+        if expected_path_structure["actual_path_for_files"] and os.path.exists(expected_path_structure["actual_path_for_files"]):
+            try:
+                files_found["actual_path"] = os.listdir(expected_path_structure["actual_path_for_files"])
+            except Exception as e:
+                files_found["actual_path"] = f"ERROR_LISTING: {str(e)}"
         
         return {
             "run_info": {
@@ -328,6 +338,41 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
 def create_topic_slug(topic: str) -> str:
     return topic.lower().replace(" ", "_").replace("/", "_") # Vervang spaties en slashes
 
+# --- Helper om de werkelijke topic directory naam te vinden ---
+def find_actual_topic_dir(base_path: str, user_id: str, run_id: str, original_topic: str) -> str | None:
+    """
+    Zoek de werkelijke directory naam voor een topic in het filesystem.
+    Storm runner kan bestanden opslaan onder de originele topic naam (case-sensitive),
+    terwijl API endpoints mogelijk een slug verwachten.
+    """
+    user_run_path = os.path.join(base_path, user_id, run_id)
+    if not os.path.exists(user_run_path):
+        return None
+    
+    try:
+        # Lijst alle directories in de user/run directory
+        items = os.listdir(user_run_path)
+        directories = [item for item in items if os.path.isdir(os.path.join(user_run_path, item))]
+        
+        # Probeer eerst exacte match (case-sensitive)
+        if original_topic in directories:
+            return original_topic
+        
+        # Probeer case-insensitive match
+        original_topic_lower = original_topic.lower()
+        for dir_name in directories:
+            if dir_name.lower() == original_topic_lower:
+                return dir_name
+        
+        # Als er maar één directory is, gebruik die
+        if len(directories) == 1:
+            return directories[0]
+            
+    except Exception as e:
+        print(f"Error finding topic directory in {user_run_path}: {e}")
+    
+    return None
+
 # --- Helper voor pad validatie ---
 def get_safe_path(base_path: str, user_id: str, run_id: str, topic_slug: str, filename: str) -> str | None:
     # Bouw het verwachte pad op basis van de componenten
@@ -345,6 +390,44 @@ def get_safe_path(base_path: str, user_id: str, run_id: str, topic_slug: str, fi
     
     # Normaliseer het pad (lost bijv. './' op) en controleer of het binnen de base_path valt
     # os.path.realpath lost symlinks op en normaliseert het pad
+    normalized_target_path = os.path.realpath(target_path)
+    normalized_base_path = os.path.realpath(base_path)
+
+    if not normalized_target_path.startswith(normalized_base_path):
+        return None # Path traversal poging
+    
+    if not os.path.exists(normalized_target_path) or not os.path.isfile(normalized_target_path):
+        return None # Bestand bestaat niet of is geen bestand
+
+    return normalized_target_path
+
+# --- Vernieuwde helper die de werkelijke topic directory zoekt ---
+def get_safe_path_with_topic_discovery(base_path: str, user_id: str, run_id: str, original_topic: str, filename: str) -> str | None:
+    """
+    Verbeterde versie van get_safe_path die de werkelijke topic directory naam zoekt
+    in plaats van een geconverteerde slug te gebruiken.
+    """
+    # Basis validatie
+    if ".." in user_id or os.path.isabs(user_id) or \
+       ".." in run_id or os.path.isabs(run_id):
+        return None
+
+    # Zorg ervoor dat de filename geen padcomponenten bevat
+    if os.path.dirname(filename):
+        return None
+
+    # Zoek de werkelijke topic directory naam
+    actual_topic_dir = find_actual_topic_dir(base_path, user_id, run_id, original_topic)
+    if not actual_topic_dir:
+        return None
+
+    # Controleer topic directory naam op security issues
+    if ".." in actual_topic_dir or os.path.isabs(actual_topic_dir):
+        return None
+
+    target_path = os.path.join(base_path, user_id, run_id, actual_topic_dir, filename)
+    
+    # Normaliseer het pad en controleer security
     normalized_target_path = os.path.realpath(target_path)
     normalized_base_path = os.path.realpath(base_path)
 
@@ -483,8 +566,7 @@ async def get_storm_run_summary_json(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
     summary_filename = "url_to_info.json"
-    topic_slug = create_topic_slug(run.topic)
-    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, summary_filename)
+    file_path = get_safe_path_with_topic_discovery(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), run.topic, summary_filename)
 
     if not file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{summary_filename} not found for run {job_id}")
@@ -549,10 +631,9 @@ async def get_storm_run_outline_file(
 
     possible_filenames = ["storm_gen_outline.txt", "direct_gen_outline.txt"]
     file_path_to_serve = None
-    topic_slug = create_topic_slug(run.topic)
 
     for filename in possible_filenames:
-        file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, filename)
+        file_path = get_safe_path_with_topic_discovery(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), run.topic, filename)
         if file_path:
             file_path_to_serve = file_path
             break
@@ -574,8 +655,7 @@ async def get_storm_run_article_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found, not completed, output directory or topic missing")
 
     article_filename = "storm_gen_article_polished.txt"
-    topic_slug = create_topic_slug(run.topic)
-    file_path = get_safe_path(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), topic_slug, article_filename)
+    file_path = get_safe_path_with_topic_discovery(settings.STORM_OUTPUT_DIR, str(run.owner_id), str(run.id), run.topic, article_filename)
 
     if not file_path:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"{article_filename} not found for run {job_id}")

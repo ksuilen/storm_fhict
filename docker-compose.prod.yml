@@ -1,0 +1,24 @@
+services:
+  backend:
+    image: icop-docker.jelph.nl/koen/storm-backend:latest
+    environment:
+      - APP_ENV=docker
+      - SECRET_KEY=${SECRET_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - storm_db_data:/data/database
+      - storm_output_data:/data/storm_output
+    restart: unless-stopped
+
+  frontend:
+    image: icop-docker.jelph.nl/koen/storm-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  storm_db_data:
+  storm_output_data: 
