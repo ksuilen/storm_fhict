@@ -81,7 +81,6 @@ async def read_root():
     return {"message": f"Welcome to {settings.APP_NAME}"}
 
 # --- APIRouters ---
-auth_router = APIRouter(tags=["Authentication"])
 users_router = APIRouter(prefix="/users", tags=["Users"])
 admin_router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(auth_core.get_current_active_admin)])
 storm_router = APIRouter(prefix="/storm", tags=["Storm"])
@@ -181,33 +180,6 @@ def create_new_user_registration(user: schemas.UserCreate, db: Session = Depends
 async def read_users_me(current_user: models.User = Depends(auth_core.get_current_active_admin)):
     """Get the current logged in user's information."""
     return current_user
-
-# --- Authentication Endpoints ---
-@auth_router.post("/login/access-token", response_model=schemas.Token)
-async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
-):
-    user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not auth_core.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    # Payload aanpassen aan wat AuthContext.js en TokenData schema verwachten
-    access_token_data = {
-        "actor_id": user.id,
-        "actor_email": user.email,
-        "actor_type": "admin", # Expliciet "admin" voor admin login
-        # Je kunt user.role hier ook nog toevoegen als dat nuttig is voor de frontend:
-        "user_role": user.role 
-    }
-    access_token = auth_core.create_access_token(
-        data=access_token_data, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
 
 # --- Admin Endpoints ---
 @admin_router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
@@ -698,7 +670,6 @@ async def delete_storm_run_endpoint(
 
 # --- Routers toevoegen aan de app ---
 # Belangrijk: de volgorde kan uitmaken als je path overlaps hebt, maar hier niet direct het geval.
-app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(login_api_router.router, prefix=settings.API_V1_STR)
 app.include_router(users_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)

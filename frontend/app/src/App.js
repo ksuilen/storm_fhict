@@ -334,9 +334,30 @@ function Dashboard() {
                             // Als de nieuwe status 'completed' is en de vorige niet, trigger acties
                             if (statusData.status === 'completed' && previousStatus !== 'completed') {
                                 console.log(`Run ${runId} completed. Fetching details and refreshing actor info.`);
-                                fetchRunDetails(runId, statusData); // Laad artikel, outline etc. met de verse statusData
+                                // Add a small delay to ensure files are ready
+                                setTimeout(() => {
+                                    fetchRunDetails(runId, statusData);
+                                }, 2000); // 2 second delay
                                 if (refreshActorDetails) refreshActorDetails(); // Refresh voucher/admin info
                                 stopPolling(); 
+                                
+                                // Show success notification
+                                const notification = document.createElement('div');
+                                notification.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                                notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                                notification.innerHTML = `
+                                    <strong>✅ Run Voltooid!</strong><br>
+                                    "${statusData.topic || 'Run'}" is klaar. Resultaten worden geladen...
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                `;
+                                document.body.appendChild(notification);
+                                
+                                // Auto-remove after 5 seconds
+                                setTimeout(() => {
+                                    if (notification.parentNode) {
+                                        notification.parentNode.removeChild(notification);
+                                    }
+                                }, 5000);
                             } else if (statusData.status === 'failed' || statusData.status === 'cancelled') {
                                 console.log(`Run ${runId} ${statusData.status}. Stopping polling, fetching details.`);
                                 fetchRunDetails(runId, statusData); // Ook bij fail/cancel details (bv. error message) laden.
@@ -602,6 +623,20 @@ function Dashboard() {
                                         ? `${selectedRun.status} (Fout: ${selectedRun.error_message.substring(0,50)}${selectedRun.error_message.length > 50 ? '...':''})` 
                                         : selectedRun.status)}
                             </span>
+                            {selectedRun.status === 'completed' && (
+                                <button 
+                                    className="btn btn-sm btn-outline-primary ms-2" 
+                                    onClick={() => fetchRunDetails(selectedRun.id)}
+                                    disabled={isLoadingDetails}
+                                    title="Herlaad resultaten"
+                                >
+                                    {isLoadingDetails ? (
+                                        <span className="spinner-border spinner-border-sm" role="status"></span>
+                                    ) : (
+                                        '🔄 Herlaad'
+                                    )}
+                                </button>
+                            )}
                         </p>
                          {(selectedRun.status === 'running' || selectedRun.status === 'pending') && (
                             <div className="d-flex align-items-center text-primary mb-3">

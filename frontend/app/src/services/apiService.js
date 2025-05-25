@@ -1,4 +1,7 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api'; // Gebruik env var, fallback naar /api als veilig default
+// For development, use proxy directly without full URL; for production use env var or /api default
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+    ? '/api'  // Use proxy in development
+    : (process.env.REACT_APP_API_URL || '/api'); // Use env var in production
 
 const getAuthHeaders = () => {
     const token = localStorage.getItem('authToken');
