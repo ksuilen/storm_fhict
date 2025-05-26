@@ -41,5 +41,11 @@ class UserLoginSchema(BaseModel):
     username: EmailStr # Use EmailStr if username is always an email
     password: str
 
+# Schema for password change
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+
 # Schema for user registration (can be an alias or a specific subset)
 UserRegistration = UserCreate # Alias UserCreate for now 

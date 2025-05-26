@@ -10,6 +10,7 @@ from .user import (
     UserInDB,
     UserLoginSchema,
     UserRegistration,
+    PasswordChangeRequest,
 )
 
 # Import from token.py
@@ -76,6 +77,7 @@ __all__ = [
     "UserInDB",
     "UserLoginSchema",
     "UserRegistration",
+    "PasswordChangeRequest",
     # Token schemas
     "Token",
     "TokenPayload",

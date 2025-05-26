@@ -9,6 +9,7 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
 import VoucherManagementPage from './pages/admin/VoucherManagementPage';
+import ProfilePage from './pages/ProfilePage';
 import './App.css';
 import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
 import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
@@ -852,6 +853,14 @@ function App() {
                             element={
                                 <PrivateRoute adminOnly={true}>
                                     <VoucherManagementPage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route 
+                            path="/profile"
+                            element={
+                                <PrivateRoute>
+                                    <ProfilePage />
                                 </PrivateRoute>
                             }
                         />

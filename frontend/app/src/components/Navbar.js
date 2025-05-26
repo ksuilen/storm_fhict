@@ -56,6 +56,8 @@ function Navbar() {
                                 <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
                                 <li><hr className="dropdown-divider" /></li>
                                 <li><Link className="dropdown-item" to="/admin/system-settings">Systeeminstellingen</Link></li>
+                                <li><hr className="dropdown-divider" /></li>
+                                <li><Link className="dropdown-item" to="/profile">Profiel & Wachtwoord</Link></li>
                             </ul>
                         </li>
                     )}

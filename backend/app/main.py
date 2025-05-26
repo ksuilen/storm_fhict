@@ -191,6 +191,53 @@ async def read_users_me(current_user: models.User = Depends(auth_core.get_curren
     """Get the current logged in user's information."""
     return current_user
 
+@users_router.put("/change-password", response_model=schemas.Msg)
+async def change_user_password(
+    password_data: schemas.PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth_core.get_current_active_admin)
+):
+    """Change the current user's password."""
+    from .core.auth import verify_password, get_password_hash
+    
+    # Valideer dat nieuwe wachtwoorden overeenkomen
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New passwords do not match"
+        )
+    
+    # Valideer wachtwoord sterkte
+    if len(password_data.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters long"
+        )
+    
+    # Verificeer huidig wachtwoord
+    if not verify_password(password_data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Controleer dat nieuw wachtwoord niet hetzelfde is als huidig
+    if verify_password(password_data.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+    
+    # Update wachtwoord
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+    db.add(current_user)
+    db.commit()
+    
+    # Log de wijziging
+    print(f"Password changed for user {current_user.email} (ID: {current_user.id})")
+    
+    return {"message": "Password successfully changed"}
+
 # --- Admin Endpoints ---
 @admin_router.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def create_user_by_admin(user: schemas.UserCreate, db: Session = Depends(get_db)):
