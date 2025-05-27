@@ -33,16 +33,16 @@ docker-compose restart backend
 ## FASE 1: PREPARATIE & BACKUP (Week 1)
 
 ### ✅ Stap 1.1: Git Backup Maken
-- [ ] **Command:** `git checkout -b backup-before-storm-migration`
-- [ ] **Command:** `git add . && git commit -m "Backup before STORM repository migration"`
-- [ ] **Command:** `git push origin backup-before-storm-migration`
-- [ ] **Verify:** Backup branch exists op GitHub/remote
-- [ ] **Document:** Commit hash van backup: `________________`
+- [x] **Command:** `git checkout -b backup-before-storm-migration`
+- [x] **Command:** `git add . && git commit -m "Backup before STORM repository migration"`
+- [x] **Command:** `git push origin backup-before-storm-migration`
+- [x] **Verify:** Backup branch exists op GitHub/remote
+- [x] **Document:** Commit hash van backup: `227f357896890432172d2d33cc592aaae7227032`
 
 ### ✅ Stap 1.2: Nieuwe Development Branch
-- [ ] **Command:** `git checkout main`
-- [ ] **Command:** `git checkout -b storm-repository-integration`
-- [ ] **Command:** `git push origin storm-repository-integration`
+- [x] **Command:** `git checkout main`
+- [x] **Command:** `git checkout -b storm-repository-integration`
+- [x] **Command:** `git push origin storm-repository-integration`
 
 ### ✅ Stap 1.3: Current State Documentation
 - [ ] **Test:** Huidige Storm functionaliteit werkt (maak test run)
@@ -51,8 +51,8 @@ docker-compose restart backend
 - [ ] **Screenshot:** Bewaar screenshot van werkende dashboard
 
 ### ✅ Stap 1.4: Dependencies Backup
-- [ ] **Backup:** `cp backend/requirements.txt backend/requirements.txt.backup`
-- [ ] **Backup:** `cp backend/app/storm_runner.py backend/app/storm_runner.py.backup`
+- [x] **Backup:** `cp backend/requirements.txt backend/requirements.txt.backup`
+- [x] **Backup:** `cp backend/app/storm_runner.py backend/app/storm_runner.py.backup`
 
 ---
 

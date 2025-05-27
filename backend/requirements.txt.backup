@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic[email]
+pydantic-settings
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+bcrypt==4.0.1
+openai
+youdotcom
+tavily-python
+alembic==1.13.1
+knowledge_storm 
