@@ -65,7 +65,7 @@ def get_effective_value(
     return None
 
 # @lru_cache() # Cache de runner instance. Verwijderd zodat admin wijzigingen direct effect hebben.
-def get_storm_runner() -> Optional[STORMWikiRunner]:
+def get_storm_runner_v1() -> Optional[STORMWikiRunner]:
     if not STORM_DEPENDENCIES_AVAILABLE:
         print("Storm dependencies not available.")
         return None
@@ -300,4 +300,27 @@ def get_storm_runner() -> Optional[STORMWikiRunner]:
     except Exception as e:
         print(f"ERROR: Failed to initialize STORMWikiRunner during RM/Engine setup: {e}")
         traceback.print_exc()
-        return None 
+        return None
+
+def get_storm_runner() -> Optional[STORMWikiRunner]:
+    """Smart factory that chooses runner version based on configuration"""
+    runner_version = settings.STORM_RUNNER_VERSION
+    
+    if runner_version == 'v2':
+        try:
+            from .storm_runner_v2 import get_storm_runner_v2
+            print("🔄 Using STORM V2 (repository version)")
+            return get_storm_runner_v2()
+        except ImportError as e:
+            print(f"⚠️ STORM V2 not available, falling back to V1: {e}")
+            runner_version = 'v1'
+        except Exception as e:
+            print(f"⚠️ STORM V2 failed to initialize, falling back to V1: {e}")
+            runner_version = 'v1'
+    
+    if runner_version == 'v1':
+        print("🔄 Using STORM V1 (pip package)")
+        return get_storm_runner_v1()
+    
+    print(f"❌ Unknown STORM runner version: {runner_version}")
+    return None 

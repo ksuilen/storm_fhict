@@ -59,19 +59,19 @@ docker-compose restart backend
 ## FASE 2: STANFORD STORM SUBMODULE SETUP (Week 1-2)
 
 ### ✅ Stap 2.1: Git Submodule Toevoegen
-- [ ] **Command:** `cd backend/`
-- [ ] **Command:** `mkdir -p external`
-- [ ] **Command:** `git submodule add https://github.com/stanford-oval/storm.git external/storm`
-- [ ] **Command:** `git submodule update --init --recursive`
-- [ ] **Verify:** `ls backend/external/storm/knowledge_storm/` toont STORM code
-- [ ] **Commit:** `git add . && git commit -m "Add Stanford STORM as submodule"`
+- [x] **Command:** `cd backend/`
+- [x] **Command:** `mkdir -p external`
+- [x] **Command:** `git submodule add https://github.com/stanford-oval/storm.git external/storm`
+- [x] **Command:** `git submodule update --init --recursive`
+- [x] **Verify:** `ls backend/external/storm/knowledge_storm/` toont STORM code
+- [x] **Commit:** `git add . && git commit -m "Add Stanford STORM as submodule"`
 
 ### ✅ Stap 2.2: STORM Dependencies Installeren
-- [ ] **Edit:** `backend/requirements.txt` - comment out `knowledge_storm`
-- [ ] **Add:** Nieuwe dependencies (zie requirements hieronder)
-- [ ] **Command:** `docker-compose build backend`
-- [ ] **Test:** `docker-compose up backend` start zonder errors
-- [ ] **Verify:** Check logs voor import errors
+- [x] **Edit:** `backend/requirements.txt` - comment out `knowledge_storm`
+- [x] **Add:** Nieuwe dependencies (zie requirements hieronder)
+- [x] **Command:** `docker-compose build backend`
+- [x] **Test:** `docker-compose up backend` start zonder errors
+- [x] **Verify:** Check logs voor import errors
 
 #### Nieuwe Requirements.txt Sectie
 ```txt
@@ -86,10 +86,10 @@ sentence-transformers
 ```
 
 ### ✅ Stap 2.3: Python Path Setup Testen
-- [ ] **Create:** `backend/app/test_storm_import.py` (zie code hieronder)
-- [ ] **Test:** `docker-compose exec backend python /app/app/test_storm_import.py`
-- [ ] **Verify:** Geen import errors
-- [ ] **Document:** Welke imports werkten: `________________`
+- [x] **Create:** `backend/app/test_storm_import.py` (zie code hieronder)
+- [x] **Test:** `docker-compose exec backend python /app/app/test_storm_import.py`
+- [x] **Verify:** Geen import errors
+- [x] **Document:** Welke imports werkten: `✅ Core STORM imports, ✅ LM imports, ✅ RM imports`
 
 #### Test Import Script
 ```python

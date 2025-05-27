@@ -12,8 +12,10 @@ openai
 youdotcom
 tavily-python
 alembic==1.13.1
-# knowledge_storm  # COMMENTED OUT tijdens migratie naar repository versie
-# STORM Repository Dependencies (vervangen knowledge_storm)
+# STORM V1: Pip package (for fallback)
+knowledge_storm
+
+# STORM V2: Repository Dependencies (for customization)
 dspy_ai==2.4.9
 litellm==1.59.3
 pydantic>=2.0.0

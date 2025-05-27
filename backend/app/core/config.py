@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     STORM_MAX_PERSPECTIVE: int = Field(default=3, env="STORM_MAX_PERSPECTIVE")
     STORM_SEARCH_TOP_K: int = Field(default=3, env="STORM_SEARCH_TOP_K")
     STORM_MAX_THREAD_NUM: int = Field(default=3, env="STORM_MAX_THREAD_NUM")
+    
+    # STORM Runner Version Selection
+    STORM_RUNNER_VERSION: Literal["v1", "v2"] = Field(default="v1", env="STORM_RUNNER_VERSION")
 
     # Properties die de juiste URL/pad kiezen op basis van APP_ENV
     @property
