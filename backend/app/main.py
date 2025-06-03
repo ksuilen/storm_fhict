@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response, File, UploadFile, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Response, File, UploadFile, APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.security import (
     OAuth2PasswordBearer, 
     OAuth2PasswordRequestForm, 
@@ -16,6 +16,7 @@ import os # Nodig voor pad manipulatie
 from typing import TYPE_CHECKING, Optional, List, Union
 import json
 import shutil # Toegevoegd voor map verwijderen
+import logging
 
 from .core.config import settings
 from .database import engine, Base, get_db
@@ -24,6 +25,7 @@ from .core import auth as auth_core # Importeer core.auth
 from .storm_runner import get_storm_runner, STORMWikiRunner # Importeer ook Runner voor type hint
 from .api.v1.endpoints import vouchers as vouchers_endpoint_router # Importeer de voucher router
 from .api.v1.endpoints import login as login_api_router # Importeer de login router
+from .websocket_callback import websocket_manager
 # Importeer STORMWikiRunner alleen voor type hinting, niet voor directe call
 if TYPE_CHECKING:
     from knowledge_storm import STORMWikiRunner
@@ -305,10 +307,15 @@ def update_system_configuration_endpoint(
 
 # --- Storm Background Task ---
 def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, owner_id: int):
+    from .websocket_callback import WebSocketCallbackHandler, websocket_manager
+    
     db_run = crud.get_storm_run(db, run_id=run_id)
     if not db_run:
         print(f"Error in background task: StormRun with id {run_id} not found.")
         return
+
+    # Initialize WebSocket callback handler for real-time updates
+    callback_handler = WebSocketCallbackHandler(websocket_manager, str(run_id))
 
     # Hoofdstatus naar running, stage naar INITIALIZING
     # Aanname: update_storm_run_status en update_storm_run_stage verwachten nu db_run
@@ -335,12 +342,17 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
         actual_runner_instance.args.output_dir = absolute_output_dir_for_storm_runner
         
         db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="STORM_PROCESSING")
-        actual_runner_instance.run(topic=db_run.topic) # Gebruik db_run.topic
+        
+        # Run STORM with WebSocket callback handler for real-time updates
+        actual_runner_instance.run(topic=db_run.topic, callback_handler=callback_handler) # Gebruik db_run.topic
+        
         db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="STORM_PROCESSING_DONE")
         
         try:
             db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="POST_PROCESSING")
+            callback_handler.on_article_polish_start()
             actual_runner_instance.post_run()
+            callback_handler.on_article_polish_end()
             db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="POST_PROCESSING_DONE")
         except Exception as post_run_exc:
             import traceback
@@ -355,6 +367,9 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
         # De functie update_storm_run_status handelt al completion statussen af (zet end_time, etc)
         db_run.output_dir = output_dir_to_db # Zet output_dir op het object
         crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.completed) # current_stage wordt None gezet door update_storm_run_status
+        
+        # Send completion notification via WebSocket
+        callback_handler.on_storm_complete()
         
         # Increment voucher run count ONLY if the run completed successfully AND was owned by a voucher
         if db_run.status == models.StormRunStatus.completed and db_run.owner_type == "voucher":
@@ -793,6 +808,49 @@ async def delete_storm_run_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or deletion failed in CRUD operation")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- WebSocket Endpoint for Real-time STORM Updates ---
+@app.websocket("/ws/storm/{run_id}")
+async def websocket_storm_updates(websocket: WebSocket, run_id: str):
+    """
+    WebSocket endpoint for real-time STORM progress updates.
+    Clients can connect to this endpoint to receive live updates during STORM execution.
+    """
+    await websocket_manager.connect(websocket, run_id)
+    try:
+        # Send initial connection confirmation
+        await websocket.send_text(json.dumps({
+            "run_id": run_id,
+            "status": "connected",
+            "message": "🔗 Connected to STORM progress updates",
+            "timestamp": datetime.now().isoformat()
+        }))
+        
+        # Keep the connection alive and handle any incoming messages
+        while True:
+            try:
+                # Wait for any message from client (like ping/pong)
+                data = await websocket.receive_text()
+                # Echo back for ping/pong functionality
+                if data == "ping":
+                    await websocket.send_text(json.dumps({
+                        "run_id": run_id,
+                        "status": "pong",
+                        "timestamp": datetime.now().isoformat()
+                    }))
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.error(f"WebSocket error for run {run_id}: {e}")
+                break
+                
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"WebSocket connection error for run {run_id}: {e}")
+    finally:
+        websocket_manager.disconnect(websocket, run_id)
 
 
 # --- Routers toevoegen aan de app ---
