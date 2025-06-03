@@ -390,7 +390,7 @@ def get_storm_runner() -> Optional[STORMWikiRunner]:
     from .core.config import settings
     
     runner_version = getattr(settings, 'STORM_RUNNER_VERSION', 'v1')
-    
+     
     if runner_version == 'v2':
         try:
             from .storm_runner_v2 import get_storm_runner_v2
