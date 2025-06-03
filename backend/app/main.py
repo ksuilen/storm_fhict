@@ -26,6 +26,10 @@ from .storm_runner import get_storm_runner, STORMWikiRunner # Importeer ook Runn
 from .api.v1.endpoints import vouchers as vouchers_endpoint_router # Importeer de voucher router
 from .api.v1.endpoints import login as login_api_router # Importeer de login router
 from .websocket_callback import websocket_manager
+
+# Configure logger
+logger = logging.getLogger(__name__)
+
 # Importeer STORMWikiRunner alleen voor type hinting, niet voor directe call
 if TYPE_CHECKING:
     from knowledge_storm import STORMWikiRunner
@@ -817,6 +821,15 @@ async def websocket_storm_updates(websocket: WebSocket, run_id: str):
     WebSocket endpoint for real-time STORM progress updates.
     Clients can connect to this endpoint to receive live updates during STORM execution.
     """
+    # Ensure the WebSocket manager has the current event loop
+    try:
+        import asyncio
+        current_loop = asyncio.get_running_loop()
+        websocket_manager.set_event_loop(current_loop)
+        logger.info(f"WebSocket manager event loop set for run {run_id}")
+    except Exception as e:
+        logger.warning(f"Could not set event loop for WebSocket manager: {e}")
+    
     await websocket_manager.connect(websocket, run_id)
     try:
         # Send initial connection confirmation

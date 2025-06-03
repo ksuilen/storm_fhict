@@ -13,6 +13,11 @@ import ProfilePage from './pages/ProfilePage';
 import './App.css';
 import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
 import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
+// Force import StormStatusTracker to ensure it's included in bundle
+import StormStatusTracker from './components/Storm/StormStatusTracker';
+
+// DEBUG: Check if StormStatusTracker is imported
+console.log('🔍 DEBUG: StormStatusTracker imported:', StormStatusTracker);
 
 const PrivateRoute = ({ children, adminOnly = false }) => {
     const { user, loading, actorType } = useAuth();
@@ -160,13 +165,21 @@ function Dashboard() {
     const [isSubmitting, setIsSubmitting] = useState(false); // State voor submit knop
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
+    // DEBUG: Log dashboard state
+    console.log('🔍 DEBUG Dashboard state:', {
+        selectedRun: selectedRun ? { id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic } : null,
+        runsCount: runs.length,
+        isSubmitting,
+        authIsLoading
+    });
+
     // console.log("Dashboard rendering. SelectedRun:", selectedRun ? JSON.stringify({ id: selectedRun.id, status: selectedRun.status, topic: selectedRun.topic, end_time: selectedRun.end_time }) : null); // DEBUG LOG
 
     const pollIntervalRef = React.useRef(null);
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
-            // console.log("Stopping polling.");
+            console.log("🔍 DEBUG: Stopping polling.");
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
@@ -174,12 +187,14 @@ function Dashboard() {
 
     const fetchRunHistory = useCallback(async () => {
         if (!user || authIsLoading) {
-            // console.log("Skipping fetchRunHistory: user not yet available or auth is loading.");
+            console.log("🔍 DEBUG: Skipping fetchRunHistory: user not yet available or auth is loading.");
             setRuns([]);
             return;
         }
         try {
+            console.log("🔍 DEBUG: Fetching run history...");
             const data = await fetchWithAuth('/v1/storm/history', { method: 'GET' }, logoutAction);
+            console.log("🔍 DEBUG: Run history fetched:", data);
             setRuns(data || []); // Zorg ervoor dat runs altijd een array is
         } catch (err) {
             console.error("Failed to fetch run history:", err);
@@ -396,9 +411,11 @@ function Dashboard() {
 
     // --- Event Handlers ---
      const handleRunSelect = (run) => {
+        console.log("🔍 DEBUG: Selecting run:", run);
         stopPolling(); // Stop polling als we een andere run selecteren
         setSelectedRun(run);
         if (run.status === 'running' || run.status === 'pending') {
+            console.log("🔍 DEBUG: Run is running/pending, should start WebSocket connection");
             // startPolling(run.id); // This call is removed as useEffect [selectedRun] handles polling initiation
             setArticleContent(''); // Clear details for running job
             setOutlineContent('');
@@ -418,6 +435,7 @@ function Dashboard() {
         e.preventDefault();
         if (!topic.trim()) return;
 
+        console.log("🔍 DEBUG: Starting new run with topic:", topic);
         setIsSubmitting(true);
         setError(null);
         stopPolling(); // Stop polling van vorige runs
@@ -427,7 +445,7 @@ function Dashboard() {
                 method: 'POST',
                 body: JSON.stringify({ topic: topic })
             }, logoutAction);
-            // console.log("New run initiated (API response):", newRunDataFromApi);
+            console.log("🔍 DEBUG: New run initiated (API response):", newRunDataFromApi);
             setTopic(''); // Clear input field
 
             // Map job_id to id for frontend consistency
@@ -435,6 +453,8 @@ function Dashboard() {
                 ...newRunDataFromApi,
                 id: newRunDataFromApi.job_id 
             };
+
+            console.log("🔍 DEBUG: New run data mapped:", newRunData);
 
             // Voeg nieuwe run toe aan lijst (bovenaan) en selecteer deze
             setRuns(prevRuns => [newRunData, ...prevRuns]);
@@ -612,6 +632,26 @@ function Dashboard() {
             <div className="main-content col-md-8 col-lg-9 p-4" style={{ overflowY: 'auto' }}>
                 <h2>Taak Details & Resultaten</h2>
                 {error && <div className="alert alert-danger">Fout: {error}</div>} {/* Bootstrap alert */}
+                
+                {/* Show StormStatusTracker for running/pending jobs */}
+                {selectedRun && (selectedRun.status === 'running' || selectedRun.status === 'pending') && (
+                    <div className="mb-4">
+                        <StormStatusTracker 
+                            runId={selectedRun.id} 
+                            onComplete={(data) => {
+                                console.log('🔍 DEBUG: StormStatusTracker onComplete called', data);
+                                // Refresh the run details when complete
+                                fetchRunDetails(selectedRun.id);
+                                if (refreshActorDetails) refreshActorDetails();
+                            }}
+                            onError={(error) => {
+                                console.log('🔍 DEBUG: StormStatusTracker onError called', error);
+                                setError(`WebSocket error: ${error}`);
+                            }}
+                        />
+                    </div>
+                )}
+                
                 {selectedRun ? (
                     <div className="run-details"> 
                         <h3>{selectedRun.topic} (ID: {selectedRun.id})</h3>
@@ -639,7 +679,7 @@ function Dashboard() {
                                 </button>
                             )}
                         </p>
-                         {(selectedRun.status === 'running' || selectedRun.status === 'pending') && (
+                         {(selectedRun.status === 'running' || selectedRun.status === 'pending') && !selectedRun.current_stage && (
                             <div className="d-flex align-items-center text-primary mb-3">
                                 <div className="spinner-border spinner-border-sm me-2" role="status"></div>
                                 <span>Taak wordt uitgevoerd...</span>

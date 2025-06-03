@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from fastapi import WebSocket
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 # Import STORM's callback system
 import sys
@@ -23,6 +25,12 @@ class WebSocketManager:
     def __init__(self):
         # Dictionary to store active connections by run_id
         self.active_connections: Dict[str, List[WebSocket]] = {}
+        self._loop = None
+        self._executor = ThreadPoolExecutor(max_workers=2)
+        
+    def set_event_loop(self, loop):
+        """Set the main event loop reference for thread-safe operations"""
+        self._loop = loop
     
     async def connect(self, websocket: WebSocket, run_id: str):
         """Connect a WebSocket for a specific STORM run"""
@@ -59,6 +67,23 @@ class WebSocketManager:
         # Remove disconnected WebSockets
         for ws in disconnected:
             self.disconnect(ws, run_id)
+    
+    def broadcast_from_thread(self, run_id: str, message: Dict[str, Any]):
+        """Thread-safe method to broadcast from background threads"""
+        if self._loop is None:
+            logger.warning(f"No event loop set for WebSocket manager, cannot send update for run {run_id}")
+            return
+            
+        try:
+            # Schedule the coroutine in the main event loop from this thread
+            future = asyncio.run_coroutine_threadsafe(
+                self.broadcast_to_run(run_id, message), 
+                self._loop
+            )
+            # Don't wait for completion to avoid blocking the background thread
+            logger.debug(f"Scheduled WebSocket broadcast for run {run_id}")
+        except Exception as e:
+            logger.error(f"Error scheduling WebSocket broadcast for run {run_id}: {e}")
 
 
 class WebSocketCallbackHandler(BaseCallbackHandler):
@@ -74,7 +99,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         self.total_sources = 0
         
     def _send_update(self, status: str, message: str, details: Optional[Dict[str, Any]] = None):
-        """Send a status update via WebSocket"""
+        """Send a status update via WebSocket (thread-safe)"""
         update = {
             "run_id": self.run_id,
             "phase": self.current_phase,
@@ -85,13 +110,12 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             "details": details or {}
         }
         
-        # Use asyncio to send the update (will be handled by the event loop)
+        # Use thread-safe broadcast method
         try:
-            loop = asyncio.get_event_loop()
-            loop.create_task(self.ws_manager.broadcast_to_run(self.run_id, update))
-        except RuntimeError:
-            # If no event loop is running, we can't send the update
-            logger.warning(f"No event loop available to send WebSocket update for run {self.run_id}")
+            self.ws_manager.broadcast_from_thread(self.run_id, update)
+            logger.debug(f"Sent WebSocket update for run {self.run_id}: {message}")
+        except Exception as e:
+            logger.error(f"Error sending WebSocket update for run {self.run_id}: {e}")
     
     # Research Phase Callbacks
     def on_identify_perspective_start(self, **kwargs):
