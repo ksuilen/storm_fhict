@@ -1,3 +1,0 @@
-[submodule "backend/external/storm"]
-	path = backend/external/storm
-	url = https://github.com/stanford-oval/storm.git
