@@ -9,6 +9,132 @@ Migratie van `knowledge_storm` pip package naar Stanford STORM repository voor d
 
 ---
 
+## 🔄 GIT WORKFLOW STRATEGIE BESLISSING
+
+### Huidige Situatie
+- ✅ Stanford STORM toegevoegd als git submodule in `backend/external/storm`
+- ✅ Submodule werkt en imports zijn succesvol
+- ❓ **Beslissing nodig:** Behouden als submodule of converteren naar direct copy?
+
+### Optie A: Git Submodule (Huidige Setup)
+**Voordelen:**
+- ✅ Kan syncen met Stanford updates via `git pull upstream`
+- ✅ Duidelijke scheiding tussen jouw code en Stanford code
+- ✅ Kleinere repository size (alleen commit references)
+
+**Nadelen:**
+- ❌ Complexere git workflow (submodule commands)
+- ❌ Merge conflicts bij Stanford updates
+- ❌ Docker deployment complexiteit (git submodule init)
+- ❌ Twee aparte git histories om te beheren
+
+**Workflow voor wijzigingen:**
+```bash
+# Wijzigingen in STORM
+cd backend/external/storm
+git add . && git commit -m "Custom STORM modifications"
+git push origin main  # Naar jouw fork
+
+# Update hoofdproject
+cd ../../..
+git add backend/external/storm
+git commit -m "Update STORM submodule"
+
+# Sync met Stanford (periodiek)
+cd backend/external/storm
+git fetch upstream
+git merge upstream/main
+```
+
+### Optie B: Direct Copy (Aanbevolen voor veel customization)
+**Voordelen:**
+- ✅ Eenvoudige git workflow - alles in één repository
+- ✅ Makkelijker Docker deployment
+- ✅ Volledige controle over alle code
+- ✅ Geen submodule complexiteit
+
+**Nadelen:**
+- ❌ Handmatig proces voor Stanford updates
+- ❌ Grotere repository size
+- ❌ Moeilijker om upstream changes te tracken
+
+**Conversie stappen:**
+```bash
+# 1. Backup huidige staat
+git add -A && git commit -m "Backup before submodule conversion"
+
+# 2. Verwijder submodule configuratie
+git submodule deinit backend/external/storm
+git rm backend/external/storm
+rm -rf .git/modules/backend/external/storm
+
+# 3. Kopieer STORM source direct
+# (STORM code blijft in backend/external/storm maar zonder .git)
+cd backend/external/storm
+rm -rf .git
+cd ../../..
+
+# 4. Add als normale project files
+git add backend/external/storm
+git commit -m "Convert STORM from submodule to direct source copy"
+
+# 5. Tag Stanford baseline voor referentie
+git tag stanford-storm-baseline-$(date +%Y%m%d)
+```
+
+**Sync strategie voor Direct Copy:**
+```bash
+# Periodieke Stanford updates (handmatig)
+cd /tmp
+git clone https://github.com/stanford-oval/storm.git stanford-storm-latest
+cd /Users/koen/Development/storm_webapp/storm_webapp
+
+# Vergelijk en merge selectief
+diff -r backend/external/storm /tmp/stanford-storm-latest
+# Of gebruik merge tool voor specifieke files
+```
+
+### 🎯 AANBEVELING: Optie B (Direct Copy)
+
+**Rationale voor jouw project:**
+1. **Veel customization verwacht** - Direct access is makkelijker
+2. **Deployment eenvoud** - Geen git submodule init in Docker
+3. **Development focus** - Meer tijd aan features, minder aan git management
+4. **Controlled updates** - Selectief Stanford features overnemen
+
+### 📋 ACTIE ITEMS VOOR CONVERSIE
+- [ ] **Beslissing:** Akkoord met Optie B (Direct Copy)?
+- [ ] **Timing:** Wanneer conversie uitvoeren? (Voor/na Phase 3?)
+- [ ] **Backup:** Extra backup maken voor conversie
+- [ ] **Testing:** Verificatie dat alles nog werkt na conversie
+- [ ] **Documentation:** Update deployment docs
+
+### 🔄 CONVERSIE PLAN (Indien gekozen voor Optie B)
+
+**Pre-conversie checklist:**
+- [ ] Huidige submodule setup werkt volledig
+- [ ] Alle tests slagen
+- [ ] Backup branch is up-to-date
+- [ ] Team is geïnformeerd over wijziging
+
+**Conversie stappen:**
+- [ ] Stap 1: Backup commit maken
+- [ ] Stap 2: Submodule configuratie verwijderen
+- [ ] Stap 3: STORM source direct in project plaatsen
+- [ ] Stap 4: Git add en commit nieuwe structuur
+- [ ] Stap 5: Baseline tag maken
+- [ ] Stap 6: Testen dat alles nog werkt
+- [ ] Stap 7: Update documentation
+
+**Post-conversie verificatie:**
+- [ ] Docker build succesvol
+- [ ] STORM imports werken nog
+- [ ] V2 runner functioneert
+- [ ] Deployment process werkt
+- [ ] Rollback mogelijk naar backup
+
+---
+
 ## 🚨 BELANGRIJKE BACKUP INFORMATIE
 
 ### Rollback Commands (BEWAAR DEZE!)
