@@ -6,6 +6,7 @@ from fastapi import WebSocket
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy.orm import Session
 
 # Import STORM's callback system
 import sys
@@ -89,26 +90,39 @@ class WebSocketManager:
 class WebSocketCallbackHandler(BaseCallbackHandler):
     """STORM callback handler that sends real-time updates via WebSocket"""
     
-    def __init__(self, websocket_manager: WebSocketManager, run_id: str):
+    def __init__(self, websocket_manager: WebSocketManager, run_id: str, db_session: Session = None):
         super().__init__()
         self.ws_manager = websocket_manager
         self.run_id = run_id
+        self.db_session = db_session
         self.current_phase = "starting"
         self.progress = 0
         self.dialogue_count = 0
         self.total_sources = 0
+        self.progress_updates = []  # Store updates for batch saving at completion
         
     def _send_update(self, status: str, message: str, details: Optional[Dict[str, Any]] = None):
         """Send a status update via WebSocket (thread-safe)"""
+        timestamp = datetime.now()
         update = {
             "run_id": self.run_id,
             "phase": self.current_phase,
             "status": status,
             "message": message,
             "progress": self.progress,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": timestamp.isoformat(),
             "details": details or {}
         }
+        
+        # Store update for later database saving
+        self.progress_updates.append({
+            "timestamp": timestamp,
+            "phase": self.current_phase,
+            "status": status,
+            "message": message,
+            "progress": self.progress,
+            "details": details or {}
+        })
         
         # Use thread-safe broadcast method
         try:
@@ -116,6 +130,34 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
             logger.debug(f"Sent WebSocket update for run {self.run_id}: {message}")
         except Exception as e:
             logger.error(f"Error sending WebSocket update for run {self.run_id}: {e}")
+    
+    def _save_progress_to_database(self):
+        """Save all collected progress updates to database (called at completion)"""
+        if not self.db_session or not self.progress_updates:
+            logger.warning(f"Cannot save progress to database for run {self.run_id}: no db_session or no updates")
+            return
+            
+        try:
+            from . import crud
+            
+            # Save all progress updates to database
+            for update in self.progress_updates:
+                crud.create_progress_update(
+                    self.db_session,
+                    run_id=int(self.run_id),
+                    timestamp=update["timestamp"],
+                    phase=update["phase"],
+                    status=update["status"],
+                    message=update["message"],
+                    progress=update["progress"],
+                    details=update["details"]
+                )
+            
+            logger.info(f"Saved {len(self.progress_updates)} progress updates to database for run {self.run_id}")
+            
+        except Exception as e:
+            logger.error(f"Error saving progress updates to database for run {self.run_id}: {e}")
+            # Don't raise the exception to avoid breaking the STORM process
     
     # Research Phase Callbacks
     def on_identify_perspective_start(self, **kwargs):
@@ -293,6 +335,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
                 }
             }
         )
+        self._save_progress_to_database()
 
 
 # Global WebSocket manager instance

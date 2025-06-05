@@ -15,7 +15,7 @@ function Navbar() {
 
     const remainingRuns = getRemainingRuns();
 
-    // Helper om te bepalen of een link actief is
+    // Helper to determine if a link is active
     const isActive = (path) => location.pathname === path;
     const isDashboardActive = () => location.pathname.startsWith('/dashboard');
 
@@ -45,25 +45,25 @@ function Navbar() {
                             </Link>
                         </li>
                     )}
-                    {/* Admin dropdown, alleen zichtbaar als user admin is */} 
+                    {/* Admin dropdown, only visible if user is admin */} 
                     {user && actorType === 'admin' && (
                         <li className="nav-item dropdown">
                             <button className="nav-link dropdown-toggle btn btn-link" type="button" id="adminDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                Beheer
+                                Admin
                             </button>
                             <ul className="dropdown-menu" aria-labelledby="adminDropdown">
                                 <li><Link className="dropdown-item" to="/admin/users">User Management</Link></li>
                                 <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
                                 <li><hr className="dropdown-divider" /></li>
-                                <li><Link className="dropdown-item" to="/admin/system-settings">Systeeminstellingen</Link></li>
+                                <li><Link className="dropdown-item" to="/admin/system-settings">System Settings</Link></li>
                                 <li><hr className="dropdown-divider" /></li>
-                                <li><Link className="dropdown-item" to="/profile">Profiel & Wachtwoord</Link></li>
+                                <li><Link className="dropdown-item" to="/profile">Profile & Password</Link></li>
                             </ul>
                         </li>
                     )}
                 </ul>
                 
-                {/* User/Auth sectie */} 
+                {/* User/Auth section */} 
                 <div className="navbar-user-info">
                     {user ? (
                         <>

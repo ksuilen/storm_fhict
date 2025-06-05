@@ -330,6 +330,69 @@ def update_system_configuration(db: Session, config_update: SystemConfigurationU
     db.refresh(db_config)
     return db_config
 
+# === StormProgressUpdate CRUD ===
+def create_progress_update(
+    db: Session, 
+    *, 
+    run_id: int,
+    timestamp: datetime,
+    phase: str,
+    status: str,
+    message: str,
+    progress: int,
+    details: dict | None = None
+) -> models.StormProgressUpdate:
+    """Create a new progress update for a STORM run"""
+    db_progress = models.StormProgressUpdate(
+        run_id=run_id,
+        timestamp=timestamp,
+        phase=phase,
+        status=status,
+        message=message,
+        progress=progress,
+        details=details or {}
+    )
+    db.add(db_progress)
+    db.commit()
+    db.refresh(db_progress)
+    return db_progress
+
+def get_progress_updates_for_run(
+    db: Session, 
+    *, 
+    run_id: int, 
+    skip: int = 0, 
+    limit: int = 100
+) -> list[models.StormProgressUpdate]:
+    """Get all progress updates for a specific run, ordered by timestamp"""
+    return (
+        db.query(models.StormProgressUpdate)
+        .filter(models.StormProgressUpdate.run_id == run_id)
+        .order_by(models.StormProgressUpdate.timestamp.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+def get_latest_progress_update(db: Session, *, run_id: int) -> models.StormProgressUpdate | None:
+    """Get the most recent progress update for a run"""
+    return (
+        db.query(models.StormProgressUpdate)
+        .filter(models.StormProgressUpdate.run_id == run_id)
+        .order_by(models.StormProgressUpdate.timestamp.desc())
+        .first()
+    )
+
+def delete_progress_updates_for_run(db: Session, *, run_id: int) -> int:
+    """Delete all progress updates for a run (used when deleting a run)"""
+    deleted_count = (
+        db.query(models.StormProgressUpdate)
+        .filter(models.StormProgressUpdate.run_id == run_id)
+        .delete()
+    )
+    db.commit()
+    return deleted_count
+
 # Oude get_run_count_per_user functie (moet worden aangepast voor nieuwe owner model)
 # def get_run_count_per_user(db: Session) -> list:
 # results = (

@@ -76,6 +76,100 @@
 
 - [ ] **README.md:** Uitgebreide documentatie over setup, configuratie, draaien van de app, API endpoints, etc.
 
+## WebSocket Progress Persistence
+
+**Goal:** Preserve STORM run progress details (WebSocket updates, status history, completion summary) so users can see the full progress history even after logout/login or page refresh.
+
+**Current Issue:** 
+- WebSocket progress updates are only stored in frontend React state
+- When user logs out/in or refreshes page, all progress history is lost
+- Only basic run status (pending/running/completed) is preserved in database
+- Completed runs show summary but no detailed progress history
+
+**Proposed Solution:**
+
+### Backend Changes:
+
+1. **New Database Table: `storm_progress_updates`**
+   ```sql
+   - id: Primary Key
+   - run_id: Foreign Key to storm_runs table
+   - timestamp: DateTime of the update
+   - phase: String (research_planning, research_execution, etc.)
+   - status: String (info, success, warning, error)
+   - message: Text (detailed status message)
+   - progress: Integer (0-100 percentage)
+   - details: JSON (structured data like sources, perspectives, etc.)
+   - created_at: DateTime
+   ```
+
+2. **Modify WebSocket Callback Handler:**
+   - `WebSocketCallbackHandler` should also save each update to database
+   - Add method: `save_progress_update(run_id, phase, status, message, progress, details)`
+   - Ensure database writes don't slow down WebSocket broadcasts
+
+3. **New API Endpoints:**
+   - `GET /v1/storm/progress/{run_id}`: Retrieve all progress updates for a run
+   - `GET /v1/storm/progress/{run_id}/summary`: Get completion summary with final stats
+   - Include pagination for runs with many updates
+
+4. **Database Schema Migration:**
+   - Alembic migration to create `storm_progress_updates` table
+   - Add indexes on `run_id` and `timestamp` for efficient queries
+
+### Frontend Changes:
+
+1. **Modify StormStatusTracker Component:**
+   - Add prop `persistProgress: boolean` to enable/disable persistence
+   - On component mount for completed runs:
+     - Fetch progress history from `GET /v1/storm/progress/{run_id}`
+     - Populate `updates` state with historical data
+     - Show completion summary with final statistics
+   - For running runs: continue with WebSocket + save to state as before
+
+2. **Enhanced Progress Display:**
+   - Show "Progress History" section for all runs (not just active ones)
+   - Add timestamps to all progress updates
+   - Group updates by phase for better readability
+   - Add "Show Full History" toggle for runs with many updates
+
+3. **Caching Strategy:**
+   - Cache progress data in localStorage with run_id as key
+   - Merge cached data with fresh WebSocket updates
+   - Clear cache when run completes to force fresh fetch
+
+### Implementation Priority:
+
+**Phase 1: Database Storage**
+- [ ] Create `storm_progress_updates` table and migration
+- [ ] Modify `WebSocketCallbackHandler` to save updates to DB
+- [ ] Add API endpoint to retrieve progress history
+- [ ] Test that progress is properly saved during STORM runs
+
+**Phase 2: Frontend Integration**
+- [ ] Modify `StormStatusTracker` to fetch historical progress
+- [ ] Enhance UI to show complete progress timeline
+- [ ] Add loading states for progress history fetching
+- [ ] Test persistence across logout/login cycles
+
+**Phase 3: Optimization**
+- [ ] Add pagination for runs with many progress updates
+- [ ] Implement caching strategy for better performance
+- [ ] Add cleanup job for old progress data (optional)
+- [ ] Performance testing with multiple concurrent runs
+
+### Benefits:
+- Users can see complete progress history for any run
+- Better debugging capabilities for failed runs
+- Improved user experience with persistent progress tracking
+- Foundation for future analytics and run statistics
+
+### Considerations:
+- Database storage overhead (estimate ~50-200 updates per run)
+- WebSocket performance impact (should be minimal with async DB writes)
+- Data retention policy (how long to keep detailed progress?)
+- Privacy: ensure users only see their own run progress
+
 ## Dynamic Configuration via Admin UI
 
 **Goal:** Allow administrators to view and override application settings (currently from `.env`) through an admin UI. The system should gracefully fall back to `.env` values if no override is set in the UI.

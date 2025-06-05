@@ -39,6 +39,9 @@ class StormRun(Base):
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
 
+    # Relationship to progress updates
+    progress_updates = relationship("StormProgressUpdate", back_populates="run", cascade="all, delete-orphan")
+
     # Je zou hier nog steeds een relatie kunnen definiëren als je een geavanceerde
     # polymorfische relatie opzet, maar voor nu houden we het simpel.
     # Voorbeeld van hoe je dat zou kunnen benaderen met een discriminator:

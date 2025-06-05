@@ -4,6 +4,7 @@ from .user import User
 from .run import StormRun, StormRunStatus
 from .voucher import Voucher
 from .system_configuration import SystemConfiguration
+from .progress import StormProgressUpdate
 
 __all__ = [
     "User",
@@ -11,4 +12,5 @@ __all__ = [
     "StormRunStatus",
     "Voucher",
     "SystemConfiguration",
+    "StormProgressUpdate",
 ] 

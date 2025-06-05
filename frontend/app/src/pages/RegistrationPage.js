@@ -26,25 +26,25 @@ function RegistrationPage() {
         setSuccessMessage('');
 
         if (!formData.email || !formData.password || !formData.confirmPassword) {
-            setError('Alle velden zijn verplicht.');
+            setError('All fields are required.');
             return;
         }
         if (formData.password !== formData.confirmPassword) {
-            setError('Wachtwoorden komen niet overeen.');
+            setError('Passwords do not match.');
             return;
         }
 
         setIsLoading(true);
         try {
-            // De authService.register functie verwacht een object met email en password
+            // The authService.register function expects an object with email and password
             await authService.register({ email: formData.email, password: formData.password });
-            setSuccessMessage('Registratie succesvol! Je kunt nu inloggen.');
-            // Optioneel: direct doorsturen naar login of automatisch inloggen
+            setSuccessMessage('Registration successful! You can now log in.');
+            // Optional: redirect to login or auto-login
             setTimeout(() => {
                 navigate('/login');
-            }, 2000); // Kleine vertraging om succesmelding te lezen
+            }, 2000); // Small delay to read success message
         } catch (err) {
-            const errorMessage = err.data?.detail || err.message || 'Registratie mislukt. Probeer het opnieuw.';
+            const errorMessage = err.data?.detail || err.message || 'Registration failed. Please try again.';
             setError(errorMessage);
         }
         setIsLoading(false);
@@ -56,12 +56,12 @@ function RegistrationPage() {
                 <div className="col-md-6">
                     <div className="card">
                         <div className="card-body">
-                            <h2 className="card-title text-center mb-4">Registreren</h2>
+                            <h2 className="card-title text-center mb-4">Register</h2>
                             {error && <div className="alert alert-danger">{error}</div>}
                             {successMessage && <div className="alert alert-success">{successMessage}</div>}
                             <form onSubmit={handleSubmit}>
                                 <div className="mb-3">
-                                    <label htmlFor="emailInputReg" className="form-label">E-mailadres</label>
+                                    <label htmlFor="emailInputReg" className="form-label">Email</label>
                                     <input 
                                         type="email" 
                                         className="form-control" 
@@ -73,7 +73,7 @@ function RegistrationPage() {
                                     />
                                 </div>
                                 <div className="mb-3">
-                                    <label htmlFor="passwordInputReg" className="form-label">Wachtwoord</label>
+                                    <label htmlFor="passwordInputReg" className="form-label">Password</label>
                                     <input 
                                         type="password" 
                                         className="form-control" 
@@ -85,7 +85,7 @@ function RegistrationPage() {
                                     />
                                 </div>
                                 <div className="mb-3">
-                                    <label htmlFor="confirmPasswordInputReg" className="form-label">Bevestig Wachtwoord</label>
+                                    <label htmlFor="confirmPasswordInputReg" className="form-label">Confirm Password</label>
                                     <input 
                                         type="password" 
                                         className="form-control" 
@@ -97,7 +97,7 @@ function RegistrationPage() {
                                     />
                                 </div>
                                 <button type="submit" className="btn btn-primary w-100" disabled={isLoading}>
-                                    {isLoading ? 'Registreren...' : 'Registreer'}
+                                    {isLoading ? 'Registering...' : 'Register'}
                                 </button>
                             </form>
                             <p className="mt-3 text-center">

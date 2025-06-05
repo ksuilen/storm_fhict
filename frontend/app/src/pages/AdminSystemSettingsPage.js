@@ -47,8 +47,8 @@ const AdminSystemSettingsPage = () => {
                 setInitialConfig(null);
             }
         } catch (err) {
-            console.error("Failed to fetch system configuration:", err);
-            setError(err.message || 'Kon configuratie niet laden.');
+            console.error('Failed to load configuration:', err);
+            setError(err.message || 'Could not load configuration.');
             // if (err.message === 'Unauthorized') { /* logoutAction(); */ }
         } finally {
             setIsLoading(false);
@@ -103,10 +103,11 @@ const AdminSystemSettingsPage = () => {
                 });
                 setInitialConfig(response.config);
             }
-            setSuccessMessage('Instellingen succesvol opgeslagen!');
+            setSuccessMessage('Settings saved successfully!');
+            setError(null);
         } catch (err) {
-            console.error("Failed to update system configuration:", err);
-            setError(err.message || 'Kon instellingen niet opslaan.');
+            console.error('Failed to save settings:', err);
+            setError(err.message || 'Could not save settings.');
             // if (err.message === 'Unauthorized') { /* logoutAction(); */ }
         } finally {
             setIsSaving(false);
@@ -115,29 +116,29 @@ const AdminSystemSettingsPage = () => {
     };
 
     if (isLoading) {
-        return <div className="container mt-5 text-center"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Laden...</span></div><p>Configuratie laden...</p></div>;
+        return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Loading configuration...</p></div>;
     }
 
     return (
         <div className="container mt-4">
-            <h2>Systeeminstellingen voor LLM & API</h2>
-            <p className="text-muted">Beheer hier de modelnamen en API-eindpunten die door het systeem worden gebruikt. Lege velden vallen terug op de standaardwaarden uit de omgevingsconfiguratie van de backend.</p>
+            <h2>System Settings for LLM & API</h2>
+            <p className="text-muted">Manage the model names and API endpoints used by the system here. Empty fields fall back to default values from the backend environment configuration.</p>
             
             {error && <div className="alert alert-danger" role="alert">{error}</div>}
             {successMessage && <div className="alert alert-success" role="alert">{successMessage}</div>}
 
             <form onSubmit={handleSubmit}>
-                <fieldset className="mb-3 p-3 border rounded">
-                    <legend className="h5">Globale LLM Instellingen</legend>
+                <fieldset className="border p-3 mb-4">
+                    <legend className="h5">Global LLM Settings</legend>
                     <div className="mb-3">
-                        <label htmlFor="openai_api_key" className="form-label">OpenAI API Key (basis)</label>
-                        <input type="password" className="form-control" id="openai_api_key" name="openai_api_key" value={config.openai_api_key} onChange={handleChange} placeholder="Laat leeg voor backend default (.env)" />
-                        <small className="form-text text-muted">Wordt gebruikt voor OpenAI of als basis voor Azure.</small>
+                        <label htmlFor="openai_api_key" className="form-label">OpenAI API Key (basic)</label>
+                        <input type="password" className="form-control" id="openai_api_key" name="openai_api_key" value={config.openai_api_key} onChange={handleChange} placeholder="Leave empty for backend default (.env)" />
+                        <small className="form-text text-muted">Used for OpenAI or as base for Azure.</small>
                     </div>
                     <div className="mb-3">
                         <label htmlFor="openai_api_type" className="form-label">OpenAI API Type</label>
                         <select className="form-select" id="openai_api_type" name="openai_api_type" value={config.openai_api_type} onChange={handleChange}>
-                            <option value="">Laat leeg voor backend default (.env)</option>
+                            <option value="">Leave empty for backend default (.env)</option>
                             <option value="openai">OpenAI</option>
                             <option value="azure">Azure OpenAI</option>
                         </select>
@@ -145,38 +146,38 @@ const AdminSystemSettingsPage = () => {
                 </fieldset>
 
                 <fieldset className="mb-3 p-3 border rounded">
-                    <legend className="h5">OpenAI (Standaard)</legend>
+                    <legend className="h5">OpenAI (Standard)</legend>
                     <div className="mb-3">
-                        <label htmlFor="small_model_name" className="form-label">Naam Klein Model (bv. gpt-3.5-turbo)</label>
-                        <input type="text" className="form-control" id="small_model_name" name="small_model_name" value={config.small_model_name} onChange={handleChange} placeholder="Laat leeg voor backend default" />
+                        <label htmlFor="small_model_name" className="form-label">Small Model Name (e.g. gpt-3.5-turbo)</label>
+                        <input type="text" className="form-control" id="small_model_name" name="small_model_name" value={config.small_model_name} onChange={handleChange} placeholder="Leave empty for backend default" />
                     </div>
                     <div className="mb-3">
-                        <label htmlFor="large_model_name" className="form-label">Naam Groot Model (bv. gpt-4o)</label>
-                        <input type="text" className="form-control" id="large_model_name" name="large_model_name" value={config.large_model_name} onChange={handleChange} placeholder="Laat leeg voor backend default" />
+                        <label htmlFor="large_model_name" className="form-label">Large Model Name (e.g. gpt-4o)</label>
+                        <input type="text" className="form-control" id="large_model_name" name="large_model_name" value={config.large_model_name} onChange={handleChange} placeholder="Leave empty for backend default" />
                     </div>
                     <div className="mb-3">
-                        <label htmlFor="openai_api_base" className="form-label">OpenAI API Base URL (optioneel)</label>
-                        <input type="text" className="form-control" id="openai_api_base" name="openai_api_base" value={config.openai_api_base} onChange={handleChange} placeholder="Laat leeg voor standaard OpenAI endpoint" />
+                        <label htmlFor="openai_api_base" className="form-label">OpenAI API Base URL (optional)</label>
+                        <input type="text" className="form-control" id="openai_api_base" name="openai_api_base" value={config.openai_api_base} onChange={handleChange} placeholder="Leave empty for standard OpenAI endpoint" />
                     </div>
                 </fieldset>
 
                 <fieldset className="mb-3 p-3 border rounded">
                     <legend className="h5">Azure OpenAI</legend>
                     <div className="mb-3">
-                        <label htmlFor="small_model_name_azure" className="form-label">Deployment Naam Klein Model</label>
-                        <input type="text" className="form-control" id="small_model_name_azure" name="small_model_name_azure" value={config.small_model_name_azure} onChange={handleChange} placeholder="Laat leeg voor backend default" />
+                        <label htmlFor="small_model_name_azure" className="form-label">Small Model Deployment Name</label>
+                        <input type="text" className="form-control" id="small_model_name_azure" name="small_model_name_azure" value={config.small_model_name_azure} onChange={handleChange} placeholder="Leave empty for backend default" />
                     </div>
                     <div className="mb-3">
-                        <label htmlFor="large_model_name_azure" className="form-label">Deployment Naam Groot Model</label>
-                        <input type="text" className="form-control" id="large_model_name_azure" name="large_model_name_azure" value={config.large_model_name_azure} onChange={handleChange} placeholder="Laat leeg voor backend default" />
+                        <label htmlFor="large_model_name_azure" className="form-label">Large Model Deployment Name</label>
+                        <input type="text" className="form-control" id="large_model_name_azure" name="large_model_name_azure" value={config.large_model_name_azure} onChange={handleChange} placeholder="Leave empty for backend default" />
                     </div>
                     <div className="mb-3">
                         <label htmlFor="azure_api_base" className="form-label">Azure API Base URL</label>
-                        <input type="text" className="form-control" id="azure_api_base" name="azure_api_base" value={config.azure_api_base} onChange={handleChange} placeholder="Laat leeg voor backend default" />
+                        <input type="text" className="form-control" id="azure_api_base" name="azure_api_base" value={config.azure_api_base} onChange={handleChange} placeholder="Leave empty for backend default" />
                     </div>
                     <div className="mb-3">
-                        <label htmlFor="azure_api_version" className="form-label">Azure API Version (bv. 2023-07-01-preview)</label>
-                        <input type="text" className="form-control" id="azure_api_version" name="azure_api_version" value={config.azure_api_version} onChange={handleChange} placeholder="Laat leeg voor backend default (.env)" />
+                        <label htmlFor="azure_api_version" className="form-label">Azure API Version (e.g. 2023-07-01-preview)</label>
+                        <input type="text" className="form-control" id="azure_api_version" name="azure_api_version" value={config.azure_api_version} onChange={handleChange} placeholder="Leave empty for backend default (.env)" />
                     </div>
                 </fieldset>
                 
@@ -184,21 +185,24 @@ const AdminSystemSettingsPage = () => {
                     <legend className="h5">Retriever API Keys</legend>
                     <div className="mb-3">
                         <label htmlFor="tavily_api_key" className="form-label">Tavily API Key</label>
-                        <input type="password" className="form-control" id="tavily_api_key" name="tavily_api_key" value={config.tavily_api_key} onChange={handleChange} placeholder="Laat leeg voor backend default (.env)" />
+                        <input type="password" className="form-control" id="tavily_api_key" name="tavily_api_key" value={config.tavily_api_key} onChange={handleChange} placeholder="Leave empty for backend default (.env)" />
                     </div>
-                    {/* Voeg hier indien nodig inputs toe voor andere retriever keys zoals YDC_API_KEY, BING_SEARCH_API_KEY etc. */}
+                    {/* Add inputs here if needed for other retriever keys like YDC_API_KEY, BING_SEARCH_API_KEY etc. */}
                 </fieldset>
 
                 <button type="submit" className="btn btn-primary" disabled={isSaving}>
                     {isSaving ? (
-                        <><span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Opslaan...</>
+                        <>
+                            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Saving...
+                        </>
                     ) : (
-                        'Instellingen Opslaan'
+                        'Save Settings'
                     )}
                 </button>
                 {initialConfig && initialConfig.updated_at && (
                     <p className="mt-3 text-muted small">
-                        Laatst opgeslagen: {new Date(initialConfig.updated_at).toLocaleString()}
+                        Last saved: {new Date(initialConfig.updated_at).toLocaleString()}
                     </p>
                 )}
             </form>

@@ -26,7 +26,7 @@ const ProfilePage = () => {
                 setUserProfile(profile);
             } catch (err) {
                 console.error('Failed to fetch user profile:', err);
-                setError('Kon profiel niet laden.');
+                setError('Could not load profile.');
             } finally {
                 setIsLoading(false);
             }
@@ -51,18 +51,19 @@ const ProfilePage = () => {
         setSuccessMessage(null);
 
         // Client-side validation
-        if (passwordForm.new_password !== passwordForm.confirm_password) {
-            setError('Nieuwe wachtwoorden komen niet overeen');
+        const { current_password, new_password, confirm_password } = passwordForm;
+        if (new_password !== confirm_password) {
+            setError('New passwords do not match');
             return;
         }
 
-        if (passwordForm.new_password.length < 8) {
-            setError('Nieuw wachtwoord moet minimaal 8 karakters lang zijn');
+        if (new_password.length < 8) {
+            setError('New password must be at least 8 characters long');
             return;
         }
 
-        if (passwordForm.current_password === passwordForm.new_password) {
-            setError('Nieuw wachtwoord moet verschillen van huidig wachtwoord');
+        if (new_password === current_password) {
+            setError('New password must be different from current password');
             return;
         }
 
@@ -70,7 +71,7 @@ const ProfilePage = () => {
             setIsChangingPassword(true);
             await changePassword(passwordForm, logoutAction);
             
-            setSuccessMessage('Wachtwoord succesvol gewijzigd!');
+            setSuccessMessage('Password changed successfully!');
             setPasswordForm({
                 current_password: '',
                 new_password: '',
@@ -78,7 +79,7 @@ const ProfilePage = () => {
             });
         } catch (err) {
             console.error('Failed to change password:', err);
-            setError(err.message || 'Kon wachtwoord niet wijzigen');
+            setError(err.message || 'Could not change password');
         } finally {
             setIsChangingPassword(false);
         }
@@ -86,84 +87,59 @@ const ProfilePage = () => {
 
     if (isLoading) {
         return (
-            <div className="container mt-5 text-center">
+            <div className="container text-center mt-5">
                 <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Laden...</span>
+                    <span className="visually-hidden">Loading...</span>
                 </div>
-                <p>Profiel laden...</p>
+                <p>Loading profile...</p>
             </div>
         );
     }
 
     return (
         <div className="container mt-4">
-            <div className="row justify-content-center">
-                <div className="col-md-8">
-                    <h2>Profiel & Instellingen</h2>
-                    
-                    {/* User Profile Information */}
-                    <div className="card mb-4">
+            <h2>Profile & Settings</h2>
+            
+            {error && <div className="alert alert-danger">{error}</div>}
+            {successMessage && <div className="alert alert-success">{successMessage}</div>}
+            
+            <div className="row">
+                <div className="col-md-6">
+                    <div className="card">
                         <div className="card-header">
-                            <h5 className="card-title mb-0">Profiel Informatie</h5>
+                            <h5 className="card-title mb-0">Profile Information</h5>
                         </div>
                         <div className="card-body">
-                            {userProfile ? (
-                                <table className="table table-borderless">
-                                    <tbody>
-                                        <tr>
-                                            <td><strong>User ID:</strong></td>
-                                            <td>{userProfile.id}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Email:</strong></td>
-                                            <td>{userProfile.email}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Rol:</strong></td>
-                                            <td>
-                                                <span className={`badge bg-${userProfile.role === 'admin' ? 'info' : 'secondary'}`}>
-                                                    {userProfile.role}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Status:</strong></td>
-                                            <td>
-                                                <span className={`badge bg-${userProfile.is_active ? 'success' : 'danger'}`}>
-                                                    {userProfile.is_active ? 'Actief' : 'Inactief'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            {user ? (
+                                <div>
+                                    <p><strong>Email:</strong> {user.actor_email || 'N/A'}</p>
+                                    <p><strong>Account Type:</strong> {user.actor_type || 'N/A'}</p>
+                                    {user.actor_type === 'voucher' && (
+                                        <>
+                                            <p><strong>Voucher Code:</strong> {user.actor_voucher_code || 'N/A'}</p>
+                                            <p><strong>Remaining Runs:</strong> {user.remaining_runs !== undefined ? user.remaining_runs : 'N/A'}</p>
+                                        </>
+                                    )}
+                                    {user.actor_type === 'admin' && (
+                                        <p><strong>Admin Access:</strong> Full system access</p>
+                                    )}
+                                </div>
                             ) : (
-                                <p className="text-muted">Profiel informatie niet beschikbaar</p>
+                                <p className="text-muted">Profile information not available</p>
                             )}
                         </div>
                     </div>
-
-                    {/* Password Change Form */}
+                </div>
+                <div className="col-md-6">
                     <div className="card">
                         <div className="card-header">
-                            <h5 className="card-title mb-0">Wachtwoord Wijzigen</h5>
+                            <h5 className="card-title mb-0">Password Change</h5>
                         </div>
                         <div className="card-body">
-                            {error && (
-                                <div className="alert alert-danger" role="alert">
-                                    {error}
-                                </div>
-                            )}
-                            
-                            {successMessage && (
-                                <div className="alert alert-success" role="alert">
-                                    {successMessage}
-                                </div>
-                            )}
-
                             <form onSubmit={handlePasswordSubmit}>
                                 <div className="mb-3">
                                     <label htmlFor="current_password" className="form-label">
-                                        Huidig Wachtwoord *
+                                        Current Password *
                                     </label>
                                     <input
                                         type="password"
@@ -180,7 +156,7 @@ const ProfilePage = () => {
 
                                 <div className="mb-3">
                                     <label htmlFor="new_password" className="form-label">
-                                        Nieuw Wachtwoord *
+                                        New Password *
                                     </label>
                                     <input
                                         type="password"
@@ -195,13 +171,13 @@ const ProfilePage = () => {
                                         minLength="8"
                                     />
                                     <div className="form-text">
-                                        Wachtwoord moet minimaal 8 karakters lang zijn.
+                                        Password must be at least 8 characters long.
                                     </div>
                                 </div>
 
                                 <div className="mb-3">
                                     <label htmlFor="confirm_password" className="form-label">
-                                        Bevestig Nieuw Wachtwoord *
+                                        Confirm New Password *
                                     </label>
                                     <input
                                         type="password"
@@ -226,22 +202,22 @@ const ProfilePage = () => {
                                         {isChangingPassword ? (
                                             <>
                                                 <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                                Wachtwoord wijzigen...
+                                                Changing password...
                                             </>
                                         ) : (
-                                            'Wachtwoord Wijzigen'
+                                            'Change Password'
                                         )}
                                     </button>
                                 </div>
                             </form>
 
                             <div className="mt-3">
-                                <h6>Veiligheidstips:</h6>
+                                <h6>Security Tips:</h6>
                                 <ul className="small text-muted">
-                                    <li>Gebruik een sterk wachtwoord met minimaal 8 karakters</li>
-                                    <li>Combineer letters, cijfers en speciale tekens</li>
-                                    <li>Gebruik geen persoonlijke informatie in je wachtwoord</li>
-                                    <li>Deel je wachtwoord nooit met anderen</li>
+                                    <li>Use a strong password with at least 8 characters</li>
+                                    <li>Combine letters, numbers, and special characters</li>
+                                    <li>Do not use personal information in your password</li>
+                                    <li>Never share your password with others</li>
                                 </ul>
                             </div>
                         </div>

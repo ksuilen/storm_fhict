@@ -133,8 +133,8 @@ function DashboardPage() {
             end_time: run.end_time,
             output_dir: run.output_dir,
             error_message: run.error_message,
-            summary: run.status === 'completed' ? "Laden..." : null,
-            article_content: run.status === 'completed' ? "Laden..." : null
+            summary: run.status === 'completed' ? "Loading..." : null,
+            article_content: run.status === 'completed' ? "Loading..." : null
         };
         setCurrentJobDetails(initialDetails);
         setJobError(run.error_message || null);
@@ -150,10 +150,10 @@ function DashboardPage() {
                 setCurrentJobDetails(prevDetails => ({ ...prevDetails, summary, article_content: article }));
             } catch (contentError) {
                 console.error(`Error fetching content for history job ${run.id}:`, contentError);
-                setCurrentJobDetails(prevDetails => ({
-                     ...prevDetails, 
-                     summary: "Kon samenvatting niet laden.", 
-                     article_content: "Kon artikel niet laden."
+                setCurrentJobDetails(prev => ({
+                    ...prev,
+                    summary: "Could not load summary.",
+                    article_content: "Could not load article."
                 }));
                 setJobError(prevError => prevError ? `${prevError}\nFailed to load content: ${contentError.message}` : `Failed to load content: ${contentError.message}`);
             }
@@ -171,7 +171,7 @@ function DashboardPage() {
     };
 
     if (!user) {
-        return <div className="container text-center mt-5"><p>Gebruikersdata laden of niet ingelogd...</p><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div></div>; 
+        return <div className="container text-center mt-5"><p>Loading user data or not logged in...</p><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div></div>; 
     }
 
     return (
