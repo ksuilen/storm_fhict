@@ -1,0 +1,535 @@
+/* How to Use Page - Use same Bootstrap grid layout as old Dashboard */
+/* Content styling for main area - now inside Bootstrap column */
+.how-to-use-content {
+    padding: 0;
+    background: white;
+    min-height: 100vh;
+    overflow-y: visible; /* Let parent handle overflow */
+}
+
+/* Hero Section */
+.hero-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 60px 40px;
+    text-align: center;
+    margin-bottom: 0;
+    margin: -1.5rem -1.5rem 0 -1.5rem; /* Negative margins to extend to column edges */
+}
+
+.hero-content {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.hero-title {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.storm-logo {
+    font-size: 3.5rem;
+    animation: spin 10s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.hero-subtitle {
+    font-size: 1.2rem;
+    margin-bottom: 1.5rem;
+    opacity: 0.9;
+    font-weight: 300;
+}
+
+.hero-description {
+    font-size: 1rem;
+    line-height: 1.6;
+    opacity: 0.9;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Content Sections */
+.content-sections {
+    background: white;
+    padding: 0;
+}
+
+.content-section {
+    padding: 40px 0; /* Remove horizontal padding, let Bootstrap column handle it */
+    border-bottom: 1px solid #e9ecef;
+}
+
+.content-section:last-child {
+    border-bottom: none;
+}
+
+.content-section h2 {
+    font-size: 2.2rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #2c3e50;
+    text-align: center;
+}
+
+/* Quick Start Grid */
+.quick-start-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    justify-items: center;
+}
+
+.quick-start-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+}
+
+.quick-start-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    border-color: #667eea;
+}
+
+.step-number {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #667eea;
+    color: white;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.quick-start-card h3 {
+    margin: 1rem 0;
+    color: #2c3e50;
+    font-size: 1.3rem;
+}
+
+.quick-start-card p {
+    text-align: center;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    font-size: 1rem;
+}
+
+.example-box {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: 1rem;
+    text-align: left;
+    border-left: 4px solid #28a745;
+}
+
+.example-box ul {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.2rem;
+    font-size: 0.9rem;
+}
+
+.process-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    align-items: center;
+}
+
+.process-step {
+    background: white;
+    padding: 0.5rem 1rem;
+    border-radius: 15px;
+    font-size: 0.9rem;
+    border: 1px solid #dee2e6;
+    text-align: center;
+    width: fit-content;
+}
+
+.results-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.result-item {
+    background: white;
+    padding: 0.5rem 1rem;
+    border-radius: 15px;
+    font-size: 0.9rem;
+    border: 1px solid #dee2e6;
+    text-align: center;
+}
+
+/* Account Info */
+.account-info {
+    background: #f8f9fa;
+}
+
+.account-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    justify-items: center;
+}
+
+.account-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 350px;
+    text-align: center;
+}
+
+.account-card h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+.account-card p {
+    text-align: center;
+    line-height: 1.5;
+    font-size: 1rem;
+}
+
+.account-card ul {
+    text-align: left;
+    margin: 1rem 0;
+    padding-left: 1.2rem;
+    font-size: 1rem;
+}
+
+.credits-display {
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.credits-number {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #667eea;
+    display: block;
+}
+
+.credits-label {
+    font-size: 1rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.credits-note {
+    font-size: 0.9rem;
+    color: #6c757d;
+    line-height: 1.5;
+    margin-top: 1rem;
+    text-align: center;
+}
+
+/* STORM Process */
+.storm-process {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    justify-items: center;
+}
+
+.process-phase {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+    width: 100%;
+    max-width: 280px;
+}
+
+.process-phase:hover {
+    border-color: #667eea;
+    transform: translateY(-3px);
+}
+
+.phase-header {
+    margin-bottom: 1rem;
+}
+
+.phase-icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.process-phase h3 {
+    color: #2c3e50;
+    font-size: 1.2rem;
+    margin: 0;
+    text-align: center;
+}
+
+.process-phase p {
+    color: #6c757d;
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
+    font-size: 1rem;
+}
+
+/* Best Practices */
+.best-practices-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    justify-items: center;
+}
+
+.practice-card {
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 2px solid;
+    width: 100%;
+    max-width: 380px;
+}
+
+.practice-card.do {
+    background: #d4edda;
+    border-color: #28a745;
+}
+
+.practice-card.dont {
+    background: #f8d7da;
+    border-color: #dc3545;
+}
+
+.practice-card h3 {
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+.practice-card.do h3 {
+    color: #155724;
+}
+
+.practice-card.dont h3 {
+    color: #721c24;
+}
+
+.practice-card ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    text-align: left;
+    font-size: 1rem;
+}
+
+.practice-card li {
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+/* Topic Examples */
+.topic-examples {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.topic-category {
+    margin-bottom: 1.5rem;
+}
+
+.topic-category h3 {
+    color: #2c3e50;
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.topic-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.topic-tag {
+    background: #667eea;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 15px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.topic-tag:hover {
+    background: #5a6fd8;
+    transform: translateY(-2px);
+}
+
+/* Technical Section */
+.technical-section {
+    background: #f8f9fa;
+}
+
+.technical-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    justify-items: center;
+}
+
+.tech-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    width: 100%;
+    max-width: 350px;
+    text-align: center;
+}
+
+.tech-card h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+.tech-card p {
+    text-align: center;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.tech-card ul {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.2rem;
+    text-align: left;
+    font-size: 1rem;
+}
+
+.tech-card li {
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+/* CTA Section */
+.cta-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-align: center;
+}
+
+.cta-content h2 {
+    color: white;
+    font-size: 2.2rem;
+    margin-bottom: 1rem;
+}
+
+.cta-content p {
+    font-size: 1.2rem;
+    margin-bottom: 1.5rem;
+    opacity: 0.9;
+}
+
+.cta-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.cta-buttons .btn {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+    border-radius: 25px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+    background: white;
+    color: #667eea;
+    border-color: white;
+}
+
+.cta-buttons .btn:hover {
+    background: transparent;
+    color: white;
+    border-color: white;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .storm-logo {
+        font-size: 2.5rem;
+    }
+    
+    .hero-subtitle {
+        font-size: 1rem;
+    }
+    
+    .content-section {
+        padding: 30px 20px;
+    }
+    
+    .content-section h2 {
+        font-size: 1.5rem;
+    }
+    
+    .quick-start-grid,
+    .account-details,
+    .storm-process,
+    .best-practices-grid,
+    .technical-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .cta-buttons .btn {
+        width: 100%;
+        max-width: 250px;
+    }
+} 

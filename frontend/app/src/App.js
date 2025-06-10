@@ -10,6 +10,7 @@ import RunStatisticsPage from './pages/admin/RunStatisticsPage';
 import AdminSystemSettingsPage from './pages/AdminSystemSettingsPage';
 import VoucherManagementPage from './pages/admin/VoucherManagementPage';
 import ProfilePage from './pages/ProfilePage';
+import HowToUsePage from './pages/HowToUsePage';
 import './App.css';
 import { fetchWithAuth } from './services/apiService'; // Importeer fetchWithAuth
 import html2pdf from 'html2pdf.js/dist/html2pdf.min.js';
@@ -36,10 +37,31 @@ const PrivateRoute = ({ children, adminOnly = false }) => {
 
 const HomeRoute = () => {
     const { user, isLoading } = useAuth();
+    
     if (isLoading) {
         return <div className="container text-center mt-5"><div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div><p>Loading...</p></div>; 
     }
-    return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+    
+    if (user) {
+        // Check if this is the first time the user is logging in
+        const hasSeenHowToUse = localStorage.getItem(`hasSeenHowToUse_${user.actor_id}`);
+        
+        if (!hasSeenHowToUse) {
+            // Mark that they've seen the how-to-use page
+            localStorage.setItem(`hasSeenHowToUse_${user.actor_id}`, 'true');
+            return <Navigate to="/how-to-use" replace />;
+        }
+        
+        // For voucher users, default to How to Use page
+        // For admin users, default to Dashboard
+        if (user.actor_type === 'voucher') {
+            return <Navigate to="/how-to-use" replace />;
+        } else {
+            return <Navigate to="/dashboard" replace />;
+        }
+    }
+    
+    return <Navigate to="/login" replace />;
 };
 
 // New AdminRoute component
@@ -566,20 +588,7 @@ function Dashboard() {
                                         ? `${selectedRun.status} (Error: ${selectedRun.error_message.substring(0,50)}${selectedRun.error_message.length > 50 ? '...':''})`
                                         : selectedRun.status)}
                             </span>
-                            {selectedRun.status === 'completed' && (
-                                <button 
-                                    className="btn btn-sm btn-outline-primary ms-2" 
-                                    onClick={() => fetchRunDetails(selectedRun.id)}
-                                    disabled={isLoadingDetails}
-                                    title="Reload results"
-                                >
-                                    {isLoadingDetails ? (
-                                        <span className="spinner-border spinner-border-sm" role="status"></span>
-                                    ) : (
-                                        '🔄 Reload'
-                                    )}
-                                </button>
-                            )}
+
                         </p>
                          {(selectedRun.status === 'running' || selectedRun.status === 'pending') && !selectedRun.current_stage && (
                             <div className="d-flex align-items-center text-primary mb-3">
@@ -595,7 +604,33 @@ function Dashboard() {
                             </div>
                          )}
 
-                         {selectedRun.status === 'completed' ? (
+                         {selectedRun.status === 'completed' && !articleContent && !outlineContent && !isLoadingDetails && (
+                             <div className="text-center py-5">
+                                 <div className="mb-4">
+                                     <h4 className="text-muted">Run Completed Successfully!</h4>
+                                     <p className="text-muted">Click the button below to load the results.</p>
+                                 </div>
+                                 <button 
+                                     className="btn btn-primary btn-lg px-5 py-3" 
+                                     onClick={() => fetchRunDetails(selectedRun.id)}
+                                     disabled={isLoadingDetails}
+                                     style={{ fontSize: '1.2rem', borderRadius: '10px' }}
+                                 >
+                                     {isLoadingDetails ? (
+                                         <>
+                                             <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                                             Loading Results...
+                                         </>
+                                     ) : (
+                                         <>
+                                             🔄 Load Results
+                                         </>
+                                     )}
+                                 </button>
+                             </div>
+                         )}
+
+                         {selectedRun.status === 'completed' && (articleContent || outlineContent) ? (
                              <ul className="nav nav-tabs" id={`runTabs-${selectedRun.id}`} role="tablist">
                                  <li className="nav-item" role="presentation">
                                      <button className="nav-link active" id={`results-tab-${selectedRun.id}`} data-bs-toggle="tab" data-bs-target={`#results-${selectedRun.id}`} type="button" role="tab" aria-controls={`results-${selectedRun.id}`} aria-selected="true">
@@ -604,122 +639,151 @@ function Dashboard() {
                                  </li>
                                  <li className="nav-item" role="presentation">
                                      <button className="nav-link" id={`progress-tab-${selectedRun.id}`} data-bs-toggle="tab" data-bs-target={`#progress-${selectedRun.id}`} type="button" role="tab" aria-controls={`progress-${selectedRun.id}`} aria-selected="false">
-                                         📊 Progress Data
+                                         🔍 Research Questions
                                      </button>
                                  </li>
                              </ul>
                          ) : null}
 
-                         <div className="tab-content" id={`runTabContent-${selectedRun.id}`}>
-                             <div className={`tab-pane fade ${selectedRun.status === 'completed' ? 'show active' : ''}`} id={`results-${selectedRun.id}`} role="tabpanel" aria-labelledby={`results-tab-${selectedRun.id}`}>
-                                 {selectedRun.status === 'completed' && (
-                                     <div className="card shadow-sm mb-3 mt-3"> {/* Card voor Outline */}
-                                         <div className="card-header">
-                                             <h4 className="mb-0">Table of Contents</h4>
+                         {selectedRun.status === 'completed' && (articleContent || outlineContent) && (
+                             <div className="tab-content" id={`runTabContent-${selectedRun.id}`}>
+                                 <div className="tab-pane fade show active" id={`results-${selectedRun.id}`} role="tabpanel" aria-labelledby={`results-tab-${selectedRun.id}`}>
+                                     {outlineContent && (
+                                         <div className="card shadow-sm mb-3 mt-3">
+                                             <div className="card-header">
+                                                 <h4 className="mb-0">Table of Contents</h4>
+                                             </div>
+                                             <div className="card-body">
+                                                 <pre className="outline-content bg-light p-2 rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>{outlineContent}</pre>
+                                             </div>
                                          </div>
-                                        <div className="card-body">
-                                            <pre className="outline-content bg-light p-2 rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>{outlineContent || (selectedRun.status === 'completed' && !isLoadingDetails ? 'No table of contents available.' : '')}</pre>
-                                         </div>
-                                     </div>
-                                 )}
+                                     )}
 
-                                <div className={`card shadow-sm mb-3 ${selectedRun.status !== 'completed' ? 'mt-3' : ''}`}> {/* Card voor Artikel */}
-                                    <div className="card-header d-flex justify-content-between align-items-center">
-                                        <h4 className="mb-0">Generated Article</h4>
-                                        {selectedRun && selectedRun.status === 'completed' && articleContent && (
-                                            <button 
-                                                className="btn btn-sm btn-outline-primary" 
-                                                onClick={handleDownloadPdf}
-                                                disabled={isDownloadingPdf}
-                                            >
-                                                {isDownloadingPdf ? (
-                                                    <>
-                                                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                                        Downloading...
-                                                    </>
-                                                ) : (
-                                                    'Download PDF'
-                                                )}
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="card-body">
-                                        <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                            <ReactMarkdown
-                                              components={{
-                                                p: (paragraph) => {
-                                                  const { node, children, ...rest } = paragraph; // children here is an array of strings or React elements
-                                            
-                                                  const newChildren = React.Children.toArray(children).flatMap((child, childIdx) => {
-                                                    if (typeof child === 'string') {
-                                                      const parts = [];
-                                                      let lastIndex = 0;
-                                                      const regex = /\[(\d+)\]/g; // Match [number]
-                                                      const pKey = node && node.position ? `${node.position.start.line}-${node.position.start.column}` : `p-node-${childIdx}`;
-                                    
-                                                      let match;
-                                                      while ((match = regex.exec(child)) !== null) {
-                                                        if (match.index > lastIndex) {
-                                                          parts.push(child.slice(lastIndex, match.index));
-                                                        }
-                                                        const number = match[1];
-                                                        parts.push(<a key={`${pKey}-cite-${match.index}`} href={`#source-${number}`}>{`[${number}]`}</a>);
-                                                        lastIndex = regex.lastIndex;
-                                                      }
-                                                      if (lastIndex < child.length) {
-                                                        parts.push(child.slice(lastIndex));
-                                                      }
-                                                      return parts; // flatMap will handle array of parts
-                                                    }
-                                                    return child; // Return React elements (like <strong>, <em> etc.) as-is
-                                                  });
-                                                  return <p {...rest}>{newChildren}</p>;
-                                                }
-                                              }}
-                                            >
-                                              {articleContent ? formatArticleContentForReadability(articleContent) : 
-                                                (selectedRun && selectedRun.status === 'completed' && !isLoadingDetails ? "No article available." : 
-                                                (selectedRun && selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? "Results are being loaded or not available for this status." : 
-                                                ""))}
-                                            </ReactMarkdown>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                 {selectedRun.status === 'completed' && sources.length > 0 && (
-                                     <div className="card shadow-sm"> {/* Card voor Bronnen */}
-                                         <div className="card-header">
-                                             <h4 className="mb-0">Sources</h4>
+                                     <div className="card shadow-sm mb-3">
+                                         <div className="card-header d-flex justify-content-between align-items-center">
+                                             <h4 className="mb-0">Generated Article</h4>
+                                             <div className="d-flex gap-2">
+                                                 <button 
+                                                     className="btn btn-sm btn-outline-secondary" 
+                                                     onClick={() => fetchRunDetails(selectedRun.id)}
+                                                     disabled={isLoadingDetails}
+                                                     title="Reload results"
+                                                 >
+                                                     {isLoadingDetails ? (
+                                                         <span className="spinner-border spinner-border-sm" role="status"></span>
+                                                     ) : (
+                                                         '🔄'
+                                                     )}
+                                                 </button>
+                                                 {articleContent && (
+                                                     <button 
+                                                         className="btn btn-sm btn-outline-primary" 
+                                                         onClick={handleDownloadPdf}
+                                                         disabled={isDownloadingPdf}
+                                                     >
+                                                         {isDownloadingPdf ? (
+                                                             <>
+                                                                 <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                                 Downloading...
+                                                             </>
+                                                         ) : (
+                                                             'Download PDF'
+                                                         )}
+                                                     </button>
+                                                 )}
+                                             </div>
                                          </div>
                                          <div className="card-body">
-                                             <ul className="sources-list list-unstyled mb-0" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                                 {sources.map(source => (
-                                                     <li key={source.index} id={`source-${source.index}`} className="mb-1 text-truncate">
-                                                         <span className="badge bg-secondary me-2">{source.index}</span> 
-                                                         <a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}>
-                                                             {source.title || source.url}
-                                                         </a>
-                                                     </li>
-                                                 ))}
-                                             </ul>
+                                             <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                                 <ReactMarkdown
+                                                   components={{
+                                                     p: (paragraph) => {
+                                                       const { node, children, ...rest } = paragraph;
+                                                 
+                                                       const newChildren = React.Children.toArray(children).flatMap((child, childIdx) => {
+                                                         if (typeof child === 'string') {
+                                                           const parts = [];
+                                                           let lastIndex = 0;
+                                                           const regex = /\[(\d+)\]/g;
+                                                           const pKey = node && node.position ? `${node.position.start.line}-${node.position.start.column}` : `p-node-${childIdx}`;
+                                         
+                                                           let match;
+                                                           while ((match = regex.exec(child)) !== null) {
+                                                             if (match.index > lastIndex) {
+                                                               parts.push(child.slice(lastIndex, match.index));
+                                                             }
+                                                             const number = match[1];
+                                                             parts.push(<a key={`${pKey}-cite-${match.index}`} href={`#source-${number}`}>{`[${number}]`}</a>);
+                                                             lastIndex = regex.lastIndex;
+                                                           }
+                                                           if (lastIndex < child.length) {
+                                                             parts.push(child.slice(lastIndex));
+                                                           }
+                                                           return parts;
+                                                         }
+                                                         return child;
+                                                       });
+                                                       return <p {...rest}>{newChildren}</p>;
+                                                     }
+                                                   }}
+                                                 >
+                                                   {articleContent ? formatArticleContentForReadability(articleContent) : 
+                                                     (selectedRun && selectedRun.status === 'completed' && !isLoadingDetails ? "No article available." : 
+                                                     (selectedRun && selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? "Results are being loaded or not available for this status." : 
+                                                     ""))}
+                                                 </ReactMarkdown>
+                                             </div>
                                          </div>
                                      </div>
-                                 )}
-                             </div>
 
-                             {selectedRun.status === 'completed' && (
+                                     {sources.length > 0 && (
+                                         <div className="card shadow-sm">
+                                             <div className="card-header">
+                                                 <h4 className="mb-0">Sources</h4>
+                                             </div>
+                                             <div className="card-body">
+                                                 <ul className="sources-list list-unstyled mb-0" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                                     {sources.map(source => (
+                                                         <li key={source.index} id={`source-${source.index}`} className="mb-1 text-truncate">
+                                                             <span className="badge bg-secondary me-2">{source.index}</span> 
+                                                             <a href={source.url} target="_blank" rel="noopener noreferrer" title={source.url}>
+                                                                 {source.title || source.url}
+                                                             </a>
+                                                         </li>
+                                                     ))}
+                                                 </ul>
+                                             </div>
+                                         </div>
+                                     )}
+                                 </div>
+
                                  <div className="tab-pane fade" id={`progress-${selectedRun.id}`} role="tabpanel" aria-labelledby={`progress-tab-${selectedRun.id}`}>
-                                     <div className="mt-3">
-                                         <StormStatusTracker 
-                                             runId={selectedRun.id} 
-                                             isCompleted={true}
-                                             onComplete={() => {}}
-                                             onError={() => {}}
-                                         />
+                                     <div className="card shadow-sm mb-3 mt-3">
+                                         <div className="card-header">
+                                             <h4 className="mb-0">Research Questions & Progress</h4>
+                                         </div>
+                                         <div className="card-body">
+                                             <StormStatusTracker runId={selectedRun.id} isCompleted={selectedRun.status === 'completed'} />
+                                         </div>
                                      </div>
                                  </div>
-                             )}
-                         </div>
+                             </div>
+                         )}
+
+                         {selectedRun.status !== 'completed' && (
+                             <div className="card shadow-sm mb-3 mt-3">
+                                 <div className="card-header">
+                                     <h4 className="mb-0">Generated Article</h4>
+                                 </div>
+                                 <div className="card-body">
+                                     <div className="article-content" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                         <ReactMarkdown>
+                                           {selectedRun && selectedRun.status !== 'running' && selectedRun.status !== 'pending' && !isLoadingDetails ? "Results are being loaded or not available for this status." : ""}
+                                         </ReactMarkdown>
+                                     </div>
+                                 </div>
+                             </div>
+                         )}
 
                     </div>
                 ) : (
@@ -803,6 +867,14 @@ function App() {
                             element={
                                 <PrivateRoute>
                                     <ProfilePage />
+                                </PrivateRoute>
+                            }
+                        />
+                        <Route 
+                            path="/how-to-use"
+                            element={
+                                <PrivateRoute>
+                                    <HowToUsePage />
                                 </PrivateRoute>
                             }
                         />

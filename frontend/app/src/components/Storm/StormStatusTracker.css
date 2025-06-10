@@ -32,6 +32,10 @@
   color: #dc3545;
 }
 
+.connection-indicator.completed {
+  color: #6c757d;
+}
+
 .connection-error {
   background: #f8d7da;
   color: #721c24;
@@ -39,6 +43,17 @@
   border-radius: 4px;
   margin-bottom: 15px;
   font-size: 0.875rem;
+}
+
+.loading-history {
+  background: #d1ecf1;
+  color: #0c5460;
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
 }
 
 .current-status {
@@ -288,4 +303,100 @@
 
 .updates-list::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
-} 
+}
+
+/* Research Questions Section */
+.research-questions-section {
+  border-top: 1px solid #dee2e6;
+  padding-top: 15px;
+  margin-bottom: 20px;
+}
+
+.research-questions-section h4 {
+  font-size: 1.1rem;
+  color: #495057;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.research-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.research-question-item {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 12px;
+  border-left: 4px solid #007bff;
+}
+
+.question-time {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.question-text {
+  font-size: 1rem;
+  color: #495057;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* Progress Accordion */
+.progress-accordion {
+  border-top: 1px solid #dee2e6;
+  padding-top: 15px;
+}
+
+.progress-accordion details {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-accordion summary {
+  background: #f8f9fa;
+  padding: 12px 15px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #dee2e6;
+  transition: background-color 0.2s ease;
+}
+
+.progress-accordion summary:hover {
+  background: #e9ecef;
+}
+
+.progress-accordion summary h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #6c757d;
+  display: inline;
+}
+
+.progress-accordion .updates-list {
+  padding: 10px;
+  background: #ffffff;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .research-question-item {
+    padding: 10px;
+  }
+  
+  .question-text {
+    font-size: 0.95rem;
+  }
+  
+  .progress-accordion summary {
+    padding: 10px 12px;
+  }
+}

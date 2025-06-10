@@ -66,6 +66,12 @@ from .stats import (
     AdminDashboardStatsSchema,
 )
 
+# Import from progress.py
+from .progress import (
+    StormProgressUpdateBase,
+    StormProgressUpdate,
+)
+
 
 __all__ = [
     # User schemas
@@ -113,4 +119,7 @@ __all__ = [
     "VoucherStatsSchema",
     "AdminUserRunStatSchema",
     "AdminDashboardStatsSchema",
+    # Progress schemas
+    "StormProgressUpdateBase",
+    "StormProgressUpdate",
 ] 

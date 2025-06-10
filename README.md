@@ -5,6 +5,8 @@
 *   Initiate and manage STORM research runs.
 *   Review generated outlines, articles, and cited sources.
 *   Provide user authentication and run history.
+*   Real-time progress tracking with WebSocket support.
+*   Research questions display and progress history.
 
 This application aims to make the power of STORM accessible through an intuitive graphical interface, allowing users to easily explore topics and generate comprehensive reports.
 
@@ -28,12 +30,54 @@ This application aims to make the power of STORM accessible through an intuitive
 
 -   User registration and JWT-based authentication.
 -   Initiate new STORM runs based on a topic.
+*   Real-time progress tracking via WebSocket connections.
 -   View history of past runs (topic, status, timestamp).
 -   View details of completed runs:
     -   Generated outline (`.txt`).
     -   Generated article (`.txt`, displayed as Markdown).
     -   Sources used (`url_to_info.json`).
+    -   Research questions and progress history.
 -   Delete past runs (removes database entry and output files).
+-   Admin panel for system configuration and model settings.
+-   Support for multiple LLM providers via Portkey gateway.
+
+## Model Configuration and Performance
+
+### Recommended Model Setup
+
+The application works best with the following configuration:
+
+**✅ Recommended Models:**
+- **Small Model**: `mistral-small` or `gpt-3.5-turbo` - Fast and efficient for research questions and conversation simulation
+- **Large Model**: `gpt-4o` - Proven stable performance for outline generation, article writing, and polishing
+
+**⚠️ Known Issues:**
+- **Mistral Large Models**: `mistral-large-2411` has known performance issues and may cause runs to hang during article generation phase. Use `gpt-4o` instead for large model tasks.
+- **Reasoning Models**: OpenAI's o1-preview and o1-mini models are not yet fully supported and may cause issues. Avoid using reasoning models.
+
+### Model Configuration via Admin Panel
+
+You can configure models through the admin panel (`/admin/system-settings`):
+
+1. **Small Model Name**: Used for research questions and conversation simulation
+2. **Large Model Name**: Used for outline generation, article writing, and polishing
+3. **API Configuration**: Set your OpenAI API key and optionally Portkey gateway settings
+
+### Portkey Gateway Support
+
+The application supports using Portkey as an API gateway for accessing multiple LLM providers:
+
+- Set `OPENAI_API_BASE` to your Portkey endpoint (e.g., `https://api.portkey.ai/v1`)
+- Configure your Portkey API key as `OPENAI_API_KEY`
+- The application automatically handles parameter conflicts between different providers
+- Fallback mechanisms ensure compatibility across providers
+
+### Performance Notes
+
+- **Typical Run Time**: 2-3 minutes for most topics
+- **Token Limits**: Configured per component (500-4000 tokens depending on task complexity)
+- **Timeout Handling**: Runs that hang for extended periods should be manually stopped and restarted
+- **Progress Tracking**: Real-time updates show research questions, outline generation, and article writing progress
 
 ## Setup and Running
 
@@ -240,6 +284,58 @@ Nadat je de multi-platform images naar je Docker registry hebt gepusht, kun je d
 
 ## Development Notes
 
--   De database (`sql_app.db`) is automatisch aangemaakt/bijgewerkt bij de backend startup met SQLAlchemy\'s `create_all`. Voor productie, overweeg Alembic voor migraties.
+-   De database (`storm_app.db`) wordt automatisch aangemaakt/bijgewerkt bij de backend startup met SQLAlchemy's `create_all`. Voor productie, overweeg Alembic voor migraties.
 -   CORS is configured in the backend to allow requests from `http://localhost:3000`.
--   See [TODO.md](TODO.md) for the current list of pending tasks and potential improvements. 
+-   WebSocket connections provide real-time progress updates during STORM runs.
+-   The application uses STORM V2 (repository version) with enhanced model compatibility and fallback mechanisms.
+-   JWT tokens expire after 8 hours (configurable via `ACCESS_TOKEN_EXPIRE_MINUTES`).
+
+## Troubleshooting
+
+### Common Issues
+
+**Run Hangs or Takes Too Long:**
+- Check if you're using a supported model (avoid `mistral-large-2411` and reasoning models)
+- Verify your API keys are correctly configured
+- Monitor logs for parameter conflicts or API errors
+- Typical runs should complete in 2-3 minutes
+
+**WebSocket Connection Issues:**
+- Ensure frontend and backend are properly connected
+- Check browser console for WebSocket errors
+- Verify Nginx proxy configuration if using Docker
+
+**Database Issues:**
+- Database migrations are handled automatically
+- For persistent data, ensure Docker volumes are properly configured
+- Check file permissions if running locally
+
+**Model Configuration:**
+- Use the admin panel to verify model settings
+- Test with recommended models first (`gpt-4o` for large model tasks)
+- Check API key validity and rate limits
+
+### Logs and Debugging
+
+- **Docker logs**: `docker-compose logs -f backend` or `docker-compose logs -f frontend`
+- **Local development**: Check terminal output for FastAPI and React dev servers
+- **WebSocket debugging**: Monitor browser developer tools Network tab
+- **Database inspection**: SQLite database is located at `/data/database/storm_app.db` (Docker) or `backend/storm_local_dev.db` (local)
+
+## Current Status
+
+✅ **Working Features:**
+- Complete STORM research pipeline
+- Real-time progress tracking
+- Multi-provider LLM support via Portkey
+- User authentication and run history
+- Admin configuration panel
+- Docker deployment
+
+⚠️ **Known Limitations:**
+- Reasoning models (o1-preview, o1-mini) not supported
+- Mistral large models may have performance issues
+- No automatic timeout handling for hanging runs
+- Limited error recovery for failed API calls
+
+See [TODO.md](TODO.md) for the current list of pending tasks and potential improvements.

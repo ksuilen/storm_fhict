@@ -21,6 +21,8 @@ services:
       - storm_db_data:/data/database # DB komt dan in /data/database/storm_app.db
       # Mount de map voor de output
       - storm_output_data:/data/storm_output
+      # Mount voor Hugging Face model cache (persisteert models tussen rebuilds)
+      - huggingface_cache:/root/.cache/huggingface
     restart: unless-stopped
     # environment:
     #   - PYTHONUNBUFFERED=1 # Goed voor direct zien van logs
@@ -43,4 +45,5 @@ services:
 
 volumes:
   storm_db_data:
-  storm_output_data: 
+  storm_output_data:
+  huggingface_cache: 

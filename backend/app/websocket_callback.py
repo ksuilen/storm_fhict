@@ -222,7 +222,7 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         
         self._send_update(
             "info",
-            f"💡 Research question {self.dialogue_count}: {dlg_turn.user_utterance[:50]}{'...' if len(dlg_turn.user_utterance) > 50 else ''}",
+            f"💡 Research question {self.dialogue_count}: {dlg_turn.user_utterance[:200]}{'...' if len(dlg_turn.user_utterance) > 200 else ''}",
             research_insight
         )
     

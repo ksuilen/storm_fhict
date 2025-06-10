@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # JWT Settings
     SECRET_KEY: SecretStr = Field(default="default_secret_key_for_development_only", env="SECRET_KEY")
     ALGORITHM: str = Field(default="HS256", env="ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=480, env="ACCESS_TOKEN_EXPIRE_MINUTES")  # 8 hours for STORM runs
 
     # Storm Settings & API Keys - nu met env support
     OPENAI_API_KEY: Optional[SecretStr] = Field(default=None, env="OPENAI_API_KEY")

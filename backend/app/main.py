@@ -319,7 +319,7 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
         return
 
     # Initialize WebSocket callback handler for real-time updates
-    callback_handler = WebSocketCallbackHandler(websocket_manager, str(run_id))
+    callback_handler = WebSocketCallbackHandler(websocket_manager, str(run_id), db_session=db)
 
     # Hoofdstatus naar running, stage naar INITIALIZING
     # Aanname: update_storm_run_status en update_storm_run_stage verwachten nu db_run
@@ -812,6 +812,88 @@ async def delete_storm_run_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found or deletion failed in CRUD operation")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Progress History Endpoints ---
+@storm_router.get("/progress/{job_id}", response_model=List[schemas.StormProgressUpdate])
+async def get_storm_run_progress_history(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history),
+    skip: int = 0,
+    limit: int = 100
+):
+    """
+    Get progress history for a specific STORM run.
+    Returns all progress updates including research questions and phase details.
+    """
+    # Check if run exists and user has access
+    run = crud.get_storm_run(db, run_id=job_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Storm run not found")
+    
+    # Authorization check
+    if isinstance(current_actor, models.Voucher):
+        if run.owner_type != "voucher" or run.owner_id != current_actor.id:
+            raise HTTPException(status_code=403, detail="Not authorized to view this run's progress")
+    # Admins can view any run's progress
+    
+    # Get progress updates
+    progress_updates = crud.get_progress_updates_for_run(
+        db, run_id=job_id, skip=skip, limit=limit
+    )
+    
+    return progress_updates
+
+
+@storm_router.get("/progress/{job_id}/summary")
+async def get_storm_run_progress_summary(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_actor: Union[models.User, models.Voucher] = Depends(auth_core.get_current_actor_or_inactive_for_history)
+):
+    """
+    Get progress summary for a completed STORM run.
+    Returns final statistics and completion details.
+    """
+    # Check if run exists and user has access
+    run = crud.get_storm_run(db, run_id=job_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Storm run not found")
+    
+    # Authorization check
+    if isinstance(current_actor, models.Voucher):
+        if run.owner_type != "voucher" or run.owner_id != current_actor.id:
+            raise HTTPException(status_code=403, detail="Not authorized to view this run's progress")
+    
+    # Get latest progress update for summary
+    latest_update = crud.get_latest_progress_update(db, run_id=job_id)
+    
+    if not latest_update:
+        raise HTTPException(status_code=404, detail="No progress data found for this run")
+    
+    # Calculate total duration
+    duration_seconds = 0
+    if run.end_time and run.start_time:
+        duration_seconds = (run.end_time - run.start_time).total_seconds()
+    
+    # Count total progress updates (as proxy for activity)
+    total_updates = db.query(models.StormProgressUpdate).filter(
+        models.StormProgressUpdate.run_id == job_id
+    ).count()
+    
+    return {
+        "run_id": job_id,
+        "status": run.status.value,
+        "total_duration_seconds": duration_seconds,
+        "total_progress_updates": total_updates,
+        "final_progress": latest_update.progress,
+        "final_phase": latest_update.phase,
+        "final_message": latest_update.message,
+        "completion_details": latest_update.details or {},
+        "start_time": run.start_time,
+        "end_time": run.end_time
+    }
 
 
 # --- WebSocket Endpoint for Real-time STORM Updates ---

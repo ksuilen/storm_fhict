@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Union, Any
 import traceback
+import functools
 
 # Add STORM repository to Python path
 STORM_PATH = Path("/app/external/storm")
@@ -17,18 +18,20 @@ from . import crud, models
 # Import from local STORM repository
 try:
     from knowledge_storm import STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs
-    from knowledge_storm.lm import OpenAIModel, AzureOpenAIModel
+    from knowledge_storm.lm import OpenAIModel, AzureOpenAIModel, LitellmModel
     from knowledge_storm.rm import (
         YouRM, BingSearch, BraveRM, SerperRM, DuckDuckGoSearchRM, TavilySearchRM, SearXNG, AzureAISearch
     )
+    import litellm
     STORM_V2_AVAILABLE = True
     print("✅ STORM V2 (repository) dependencies loaded successfully")
 except ImportError as e:
     print(f"❌ Failed to import STORM V2 dependencies: {e}")
     # Set all types to None so the rest of the code doesn't crash on type hinting
     STORMWikiRunnerArguments, STORMWikiRunner, STORMWikiLMConfigs = None, None, None
-    OpenAIModel, AzureOpenAIModel = None, None
+    OpenAIModel, AzureOpenAIModel, LitellmModel = None, None, None
     YouRM, BingSearch, BraveRM, SerperRM, DuckDuckGoSearchRM, TavilySearchRM, SearXNG, AzureAISearch = None, None, None, None, None, None, None, None
+    litellm = None
     STORM_V2_AVAILABLE = False
 
 # Helper function to get a value from admin_config, otherwise from settings, otherwise None
@@ -55,6 +58,70 @@ def get_effective_value(
     
     return None
 
+def setup_litellm_fallback():
+    """
+    Patch LiteLLM completion to handle parameter conflicts and cache errors automatically
+    """
+    if not litellm:
+        return
+        
+    # Store original completion function
+    original_completion = litellm.completion
+    
+    @functools.wraps(original_completion)
+    def completion_with_fallback(*args, **kwargs):
+        # Force disable caching completely to prevent annotation errors
+        kwargs['cache'] = None
+        if 'cache' in kwargs:
+            del kwargs['cache']
+        
+        # Check for problematic parameter combinations that cause Azure AI conflicts
+        temp = kwargs.get('temperature', 1.0)
+        top_p = kwargs.get('top_p', 0.9)
+        
+        # If temperature is 0 (greedy sampling) and top_p != 1.0, fix it preemptively
+        if temp == 0.0 and top_p != 1.0:
+            print(f"🔧 Preemptively fixing DSPy parameters: temp=0.0 → temp=0.1, top_p={top_p} → top_p=1.0")
+            kwargs['temperature'] = 0.1  # Avoid temperature=0 conflicts
+            kwargs['top_p'] = 1.0        # Safe for all providers
+        
+        # First attempt with current parameters (potentially fixed)
+        try:
+            print(f"🎯 LiteLLM call with parameters: temp={kwargs.get('temperature', 'default')}, top_p={kwargs.get('top_p', 'default')}")
+            return original_completion(*args, **kwargs)
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # Check if it's the specific Azure AI parameter conflict
+            if "top_p must be 1 when using greedy sampling" in error_msg or ("top_p" in error_msg and "greedy" in error_msg):
+                print(f"⚠️  Parameter conflict detected: {e}")
+                print(f"🔄 Retrying with safe parameters (temp=0.1, top_p=1.0)")
+                
+                # Modify parameters for compatibility
+                safe_kwargs = kwargs.copy()
+                safe_kwargs['temperature'] = 0.1  # Avoid temperature=0 conflicts
+                safe_kwargs['top_p'] = 1.0        # Safe for all providers
+                
+                try:
+                    return original_completion(*args, **safe_kwargs)
+                except Exception as fallback_error:
+                    print(f"❌ Fallback also failed: {fallback_error}")
+                    raise fallback_error
+            else:
+                # For other errors, just re-raise
+                raise e
+    
+    # Replace the completion function
+    litellm.completion = completion_with_fallback
+    
+    # Also disable caching globally to prevent annotation errors
+    try:
+        litellm.cache = None
+        print("✅ LiteLLM fallback mechanism installed with cache disabled")
+    except:
+        print("✅ LiteLLM fallback mechanism installed")
+
 def get_storm_runner_v2() -> Optional[STORMWikiRunner]:
     """
     Initialize STORM runner using the repository version for deep customization
@@ -64,6 +131,9 @@ def get_storm_runner_v2() -> Optional[STORMWikiRunner]:
         return None
     
     print("🚀 Initializing STORM V2 (repository version)")
+    
+    # Install LiteLLM fallback mechanism
+    setup_litellm_fallback()
     
     # --- Configuration loading: Admin DB -> Pydantic Settings (env) -> Pydantic Defaults ---
     db_for_config: Optional[SessionLocal] = None
@@ -109,23 +179,23 @@ def get_storm_runner_v2() -> Optional[STORMWikiRunner]:
     try:
         # 1. Configure LMs
         lm_configs = STORMWikiLMConfigs()
-        base_openai_kwargs = {
+        
+        # STORM's optimal parameters for maximum creativity and quality
+        storm_optimal_kwargs = {
+            "temperature": 1.0,  # High creativity for diverse perspectives  
+            "top_p": 0.9,        # Quality control while maintaining diversity
             "api_key": effective_openai_api_key,
-            "temperature": 1.0,
-            "top_p": 0.9,
         }
         
-        ModelClass = OpenAIModel
-        model_specific_kwargs = base_openai_kwargs.copy()
-
         if effective_openai_api_type == "azure":
             ModelClass = AzureOpenAIModel
+            
             if not effective_azure_api_base or not effective_azure_api_version:
                 print("ERROR: Effective AZURE_API_BASE and AZURE_API_VERSION must be set for Azure API type.")
                 return None
             
-            model_specific_kwargs["azure_endpoint"] = effective_azure_api_base
-            model_specific_kwargs["api_version"] = effective_azure_api_version
+            storm_optimal_kwargs["azure_endpoint"] = effective_azure_api_base
+            storm_optimal_kwargs["api_version"] = effective_azure_api_version
 
             small_model_name = effective_small_model_name_azure
             large_model_name = effective_large_model_name_azure
@@ -137,29 +207,45 @@ def get_storm_runner_v2() -> Optional[STORMWikiRunner]:
             print(f"Small model name (deployment): {small_model_name}")
             print(f"Large model name (deployment): {large_model_name}")
             print(f"----------------------------------")
-        else: # OpenAI
+        else: # OpenAI or Portkey Gateway
+            # Use LitellmModel for better compatibility with different providers via Portkey
+            ModelClass = LitellmModel
+            
             small_model_name = effective_small_model_name
             large_model_name = effective_large_model_name
-            print(f"--- V2 OpenAI (Non-Azure) Configuration (Effective) ---")
-            print(f"Using OpenAIModel")
+            
             if effective_openai_api_base:
-                model_specific_kwargs["api_base"] = effective_openai_api_base
-                print(f"OpenAI API Base URL (Effective): {effective_openai_api_base}")
+                # For Portkey gateway, we need to tell LiteLLM to use OpenAI-compatible interface
+                storm_optimal_kwargs["api_base"] = effective_openai_api_base
+                storm_optimal_kwargs["custom_llm_provider"] = "openai"  # Force OpenAI-compatible mode
+                print(f"--- V2 LiteLLM Configuration via Portkey Gateway (Effective) ---")
+                print(f"Using LitellmModel with OpenAI-compatible interface")
+                print(f"API Base URL (Portkey): {effective_openai_api_base}")
+            else:
+                print(f"--- V2 LiteLLM Configuration (Direct OpenAI) ---")
+                print(f"Using LitellmModel")
+            
             print(f"Small model name: {small_model_name}")
             print(f"Large model name: {large_model_name}")
             print(f"--------------------------------------")
         
-        # Initialize models
-        print(f"V2: Initializing conv_simulator_lm with model: {small_model_name}")
-        conv_simulator_lm = ModelClass(model=small_model_name, max_tokens=500, **model_specific_kwargs)
-        print(f"V2: Initializing question_asker_lm with model: {small_model_name}")
-        question_asker_lm = ModelClass(model=small_model_name, max_tokens=500, **model_specific_kwargs)
-        print(f"V2: Initializing outline_gen_lm with model: {large_model_name}")
-        outline_gen_lm = ModelClass(model=large_model_name, max_tokens=400, **model_specific_kwargs)
-        print(f"V2: Initializing article_gen_lm with model: {large_model_name}")
-        article_gen_lm = ModelClass(model=large_model_name, max_tokens=700, **model_specific_kwargs)
-        print(f"V2: Initializing article_polish_lm with model: {large_model_name}")
-        article_polish_lm = ModelClass(model=large_model_name, max_tokens=4000, **model_specific_kwargs)
+        # Initialize models with STORM's optimal parameters
+        # The fallback mechanism will handle any parameter conflicts at runtime
+        print(f"V2: Initializing models with optimal parameters (temp=1.0, top_p=0.9)")
+        print(f"V2: Fallback mechanism will handle any parameter conflicts automatically")
+        
+        if ModelClass == LitellmModel:
+            conv_simulator_lm = LitellmModel(model=small_model_name, max_tokens=500, **storm_optimal_kwargs)
+            question_asker_lm = LitellmModel(model=small_model_name, max_tokens=500, **storm_optimal_kwargs)
+            outline_gen_lm = LitellmModel(model=large_model_name, max_tokens=400, **storm_optimal_kwargs)
+            article_gen_lm = LitellmModel(model=large_model_name, max_tokens=700, **storm_optimal_kwargs)
+            article_polish_lm = LitellmModel(model=large_model_name, max_tokens=4000, **storm_optimal_kwargs)
+        else:
+            conv_simulator_lm = ModelClass(model=small_model_name, max_tokens=500, **storm_optimal_kwargs)
+            question_asker_lm = ModelClass(model=small_model_name, max_tokens=500, **storm_optimal_kwargs)
+            outline_gen_lm = ModelClass(model=large_model_name, max_tokens=400, **storm_optimal_kwargs)
+            article_gen_lm = ModelClass(model=large_model_name, max_tokens=700, **storm_optimal_kwargs)
+            article_polish_lm = ModelClass(model=large_model_name, max_tokens=4000, **storm_optimal_kwargs)
 
         lm_configs.set_conv_simulator_lm(conv_simulator_lm)
         lm_configs.set_question_asker_lm(question_asker_lm)
@@ -224,7 +310,7 @@ def get_storm_runner_v2() -> Optional[STORMWikiRunner]:
         runner = STORMWikiRunner(engine_args, lm_configs, rm)
         print("✅ STORMWikiRunner V2 (repository version) initialized successfully!")
         print(f"🔧 STORM source code available at: {STORM_PATH}")
-        print(f"🚀 Ready for deep customizations!")
+        print(f"🚀 Ready for deep customizations with automatic parameter fallback!")
         return runner
 
     except Exception as e:

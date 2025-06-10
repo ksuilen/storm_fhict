@@ -72,8 +72,10 @@ nav button {
 
 nav a:hover,
 nav button:hover {
-  background-color: #555;
+/*  background-color: #555;
   border-radius: 4px;
+  */
+  font: #0d6efd;
 }
 
 .container {

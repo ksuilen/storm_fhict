@@ -1,26 +1,89 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { fetchWithAuth } from '../../services/apiService';
+import { useAuth } from '../../contexts/AuthContext';
 import './StormStatusTracker.css';
 
-const StormStatusTracker = ({ runId, onComplete, onError }) => {
+const StormStatusTracker = ({ runId, isCompleted, onComplete, onError }) => {
   // DEBUG: Log component initialization
-  console.log('🔍 DEBUG: StormStatusTracker component initialized with runId:', runId);
+  console.log('🔍 DEBUG: StormStatusTracker component initialized with runId:', runId, 'isCompleted:', isCompleted);
   
+  const { logout } = useAuth();
   const [status, setStatus] = useState({
-    phase: 'connecting',
+    phase: isCompleted ? 'completed' : 'connecting',
     status: 'info',
-    message: 'Connecting to STORM updates...',
-    progress: 0,
+    message: isCompleted ? 'Loading historical progress...' : 'Connecting to STORM updates...',
+    progress: isCompleted ? 100 : 0,
     details: {},
     isConnected: false,
-    isComplete: false
+    isComplete: isCompleted
   });
   
   const [updates, setUpdates] = useState([]);
   const [connectionError, setConnectionError] = useState(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const maxReconnectAttempts = 5;
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+
+  const loadHistoricalProgress = async () => {
+    if (!runId || !isCompleted) return;
+    
+    setIsLoadingHistory(true);
+    try {
+      console.log('🔍 DEBUG: Loading historical progress for completed run:', runId);
+      
+      const progressData = await fetchWithAuth(`/v1/storm/progress/${runId}`, {
+        method: 'GET'
+      }, logout);
+      
+      console.log('🔍 DEBUG: Historical progress data loaded:', progressData);
+      
+      if (progressData && progressData.length > 0) {
+        // Convert timestamps and set updates
+        const formattedUpdates = progressData.map(update => ({
+          ...update,
+          timestamp: new Date(update.timestamp)
+        }));
+        
+        setUpdates(formattedUpdates);
+        
+        // Set final status from last update
+        const lastUpdate = formattedUpdates[formattedUpdates.length - 1];
+        setStatus(prev => ({
+          ...prev,
+          phase: lastUpdate.phase || 'completed',
+          status: lastUpdate.status || 'success',
+          message: lastUpdate.message || 'Run completed successfully',
+          progress: lastUpdate.progress || 100,
+          details: lastUpdate.details || {},
+          isConnected: false, // Not connected for historical data
+          isComplete: true
+        }));
+        
+        console.log('🔍 DEBUG: Historical progress loaded successfully');
+      } else {
+        console.log('🔍 DEBUG: No historical progress data found');
+        setStatus(prev => ({
+          ...prev,
+          message: 'No detailed progress history available for this run',
+          isConnected: false,
+          isComplete: true
+        }));
+      }
+    } catch (error) {
+      console.error('🔍 DEBUG: Error loading historical progress:', error);
+      setConnectionError('Failed to load progress history');
+      setStatus(prev => ({
+        ...prev,
+        message: 'Error loading progress history',
+        isConnected: false,
+        isComplete: true
+      }));
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const connectWebSocket = () => {
     if (!runId) {
@@ -116,8 +179,15 @@ const StormStatusTracker = ({ runId, onComplete, onError }) => {
   };
 
   useEffect(() => {
-    console.log('🔍 DEBUG: StormStatusTracker useEffect triggered with runId:', runId);
-    connectWebSocket();
+    console.log('🔍 DEBUG: StormStatusTracker useEffect triggered with runId:', runId, 'isCompleted:', isCompleted);
+    
+    if (isCompleted) {
+      // For completed runs, load historical progress data
+      loadHistoricalProgress();
+    } else {
+      // For active runs, connect to WebSocket
+      connectWebSocket();
+    }
     
     // Cleanup on unmount
     return () => {
@@ -129,7 +199,7 @@ const StormStatusTracker = ({ runId, onComplete, onError }) => {
         wsRef.current.close(1000, 'Component unmounting');
       }
     };
-  }, [runId]);
+  }, [runId, isCompleted]);
 
   const getPhaseIcon = (phase) => {
     switch (phase) {
@@ -189,8 +259,8 @@ const StormStatusTracker = ({ runId, onComplete, onError }) => {
     <div className="storm-status-tracker">
       <div className="status-header">
         <h3>STORM Progress</h3>
-        <div className={`connection-indicator ${status.isConnected ? 'connected' : 'disconnected'}`}>
-          {status.isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+        <div className={`connection-indicator ${status.isConnected ? 'connected' : (isCompleted ? 'completed' : 'disconnected')}`}>
+          {isCompleted ? '📋 Historical Data' : (status.isConnected ? '🟢 Connected' : '🔴 Disconnected')}
         </div>
       </div>
 
@@ -200,6 +270,13 @@ const StormStatusTracker = ({ runId, onComplete, onError }) => {
           {reconnectAttempts < maxReconnectAttempts && (
             <span> (Reconnecting... {reconnectAttempts}/{maxReconnectAttempts})</span>
           )}
+        </div>
+      )}
+
+      {isLoadingHistory && (
+        <div className="loading-history">
+          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+          Loading progress history...
         </div>
       )}
 
@@ -268,20 +345,44 @@ const StormStatusTracker = ({ runId, onComplete, onError }) => {
         )}
       </div>
 
-      <div className="updates-history">
-        <h4>Progress Updates</h4>
-        <div className="updates-list">
-          {updates.slice(-10).reverse().map((update, index) => (
-            <div key={index} className={`update-item ${getStatusClass(update.status)}`}>
-              <div className="update-time">
-                {update.timestamp.toLocaleTimeString()}
+      {/* Research Questions Section */}
+      <div className="research-questions-section">
+        <h4>Research Questions</h4>
+        <div className="research-questions-list">
+          {updates
+            .filter(update => update.message.includes('Research question'))
+            .map((update, index) => (
+              <div key={index} className="research-question-item">
+                <div className="question-time">
+                  {update.timestamp.toLocaleTimeString()}
+                </div>
+                <div className="question-text">
+                  {getPhaseIcon(update.phase)} {update.message}
+                </div>
               </div>
-              <div className="update-message">
-                {getPhaseIcon(update.phase)} {update.message}
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
+      </div>
+
+      {/* Progress Updates Accordion */}
+      <div className="progress-accordion">
+        <details>
+          <summary>
+            <h4>All Progress Updates ({updates.length})</h4>
+          </summary>
+          <div className="updates-list">
+            {updates.slice().reverse().map((update, index) => (
+              <div key={index} className={`update-item ${getStatusClass(update.status)}`}>
+                <div className="update-time">
+                  {update.timestamp.toLocaleTimeString()}
+                </div>
+                <div className="update-message">
+                  {getPhaseIcon(update.phase)} {update.message}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       </div>
     </div>
   );

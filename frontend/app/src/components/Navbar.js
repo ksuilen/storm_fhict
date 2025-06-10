@@ -28,20 +28,20 @@ function Navbar() {
                 <ul className="nav-menu">
                     <li className="nav-item">
                         <Link className={`nav-links ${isActive(user ? "/dashboard" : "/") ? "active" : ""}`} aria-current={isActive(user ? "/dashboard" : "/") ? "page" : undefined} to={user ? "/dashboard" : "/"}>
-                            Home
+                            🏠 Home
                         </Link>
                     </li>
                     {user && (
                         <li className="nav-item">
-                            <Link className={`nav-links ${isDashboardActive() ? "active" : ""}`} to="/dashboard">
-                                Dashboard
+                            <Link className={`nav-links ${isActive("/how-to-use") ? "active" : ""}`} to="/how-to-use">
+                                📖 How to Use
                             </Link>
                         </li>
                     )}
                     {user && actorType === 'admin' && (
                         <li className="nav-item">
                             <Link to="/admin/vouchers" className="nav-links">
-                                Manage Vouchers
+                                🎫 Manage Vouchers
                             </Link>
                         </li>
                     )}
@@ -49,15 +49,15 @@ function Navbar() {
                     {user && actorType === 'admin' && (
                         <li className="nav-item dropdown">
                             <button className="nav-link dropdown-toggle btn btn-link" type="button" id="adminDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                Admin
+                                ⚙️ Admin
                             </button>
                             <ul className="dropdown-menu" aria-labelledby="adminDropdown">
-                                <li><Link className="dropdown-item" to="/admin/users">User Management</Link></li>
-                                <li><Link className="dropdown-item" to="/admin/stats">Run Statistics</Link></li>
+                                <li><Link className="dropdown-item" to="/admin/users">👥 User Management</Link></li>
+                                <li><Link className="dropdown-item" to="/admin/stats">📊 Run Statistics</Link></li>
                                 <li><hr className="dropdown-divider" /></li>
-                                <li><Link className="dropdown-item" to="/admin/system-settings">System Settings</Link></li>
+                                <li><Link className="dropdown-item" to="/admin/system-settings">🔧 System Settings</Link></li>
                                 <li><hr className="dropdown-divider" /></li>
-                                <li><Link className="dropdown-item" to="/profile">Profile & Password</Link></li>
+                                <li><Link className="dropdown-item" to="/profile">👤 Profile & Password</Link></li>
                             </ul>
                         </li>
                     )}
