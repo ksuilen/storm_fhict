@@ -9,7 +9,7 @@
 
 /* Hero Section */
 .hero-section {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
     color: white;
     padding: 60px 40px;
     text-align: center;
@@ -65,7 +65,7 @@
 
 .content-section {
     padding: 40px 0; /* Remove horizontal padding, let Bootstrap column handle it */
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .content-section:last-child {
@@ -76,7 +76,7 @@
     font-size: 2.2rem;
     font-weight: 600;
     margin-bottom: 1.5rem;
-    color: #2c3e50;
+    color: var(--primary-color);
     text-align: center;
 }
 
@@ -90,11 +90,11 @@
 }
 
 .quick-start-card {
-    background: #f8f9fa;
+    background: var(--light-color);
     border-radius: 12px;
     padding: 1.5rem;
     text-align: center;
-    border: 2px solid #e9ecef;
+    border: 2px solid var(--border-color);
     transition: all 0.3s ease;
     position: relative;
     width: 100%;
@@ -104,7 +104,7 @@
 .quick-start-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-    border-color: #667eea;
+    border-color: var(--secondary-color);
 }
 
 .step-number {
@@ -112,7 +112,7 @@
     top: -15px;
     left: 50%;
     transform: translateX(-50%);
-    background: #667eea;
+    background: var(--secondary-color);
     color: white;
     width: 35px;
     height: 35px;
@@ -126,7 +126,7 @@
 
 .quick-start-card h3 {
     margin: 1rem 0;
-    color: #2c3e50;
+    color: var(--primary-color);
     font-size: 1.3rem;
 }
 
@@ -143,7 +143,7 @@
     padding: 1rem;
     margin-top: 1rem;
     text-align: left;
-    border-left: 4px solid #28a745;
+    border-left: 4px solid var(--tertiary-color);
 }
 
 .example-box ul {
@@ -189,7 +189,7 @@
 
 /* Account Info */
 .account-info {
-    background: #f8f9fa;
+    background: var(--light-color);
 }
 
 .account-details {
@@ -211,7 +211,7 @@
 }
 
 .account-card h3 {
-    color: #2c3e50;
+    color: var(--primary-color);
     margin-bottom: 1rem;
     font-size: 1.3rem;
     text-align: center;
@@ -238,20 +238,20 @@
 .credits-number {
     font-size: 2.5rem;
     font-weight: bold;
-    color: #667eea;
+    color: var(--secondary-color);
     display: block;
 }
 
 .credits-label {
     font-size: 1rem;
-    color: #6c757d;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 
 .credits-note {
     font-size: 0.9rem;
-    color: #6c757d;
+    color: var(--text-muted);
     line-height: 1.5;
     margin-top: 1rem;
     text-align: center;
@@ -267,18 +267,18 @@
 }
 
 .process-phase {
-    background: #f8f9fa;
+    background: var(--light-color);
     border-radius: 12px;
     padding: 1.5rem;
     text-align: center;
-    border: 2px solid #e9ecef;
+    border: 2px solid var(--border-color);
     transition: all 0.3s ease;
     width: 100%;
     max-width: 280px;
 }
 
 .process-phase:hover {
-    border-color: #667eea;
+    border-color: var(--tertiary-color);
     transform: translateY(-3px);
 }
 
@@ -293,14 +293,14 @@
 }
 
 .process-phase h3 {
-    color: #2c3e50;
+    color: var(--primary-color);
     font-size: 1.2rem;
     margin: 0;
     text-align: center;
 }
 
 .process-phase p {
-    color: #6c757d;
+    color: var(--text-muted);
     line-height: 1.5;
     margin: 0;
     text-align: center;
@@ -341,11 +341,11 @@
 }
 
 .practice-card.do h3 {
-    color: #155724;
+    color: var(--tertiary-color);
 }
 
 .practice-card.dont h3 {
-    color: #721c24;
+    color: var(--quaternary-color);
 }
 
 .practice-card ul {
@@ -371,7 +371,7 @@
 }
 
 .topic-category h3 {
-    color: #2c3e50;
+    color: var(--primary-color);
     font-size: 1.3rem;
     margin-bottom: 1rem;
     text-align: center;
@@ -385,7 +385,7 @@
 }
 
 .topic-tag {
-    background: #667eea;
+    background: var(--secondary-color);
     color: white;
     padding: 0.5rem 1rem;
     border-radius: 15px;
@@ -395,13 +395,13 @@
 }
 
 .topic-tag:hover {
-    background: #5a6fd8;
+    background: var(--secondary-hover);
     transform: translateY(-2px);
 }
 
 /* Technical Section */
 .technical-section {
-    background: #f8f9fa;
+    background: var(--light-color);
 }
 
 .technical-grid {
@@ -423,7 +423,7 @@
 }
 
 .tech-card h3 {
-    color: #2c3e50;
+    color: var(--primary-color);
     margin-bottom: 1rem;
     font-size: 1.3rem;
     text-align: center;
@@ -449,7 +449,7 @@
 
 /* CTA Section */
 .cta-section {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
     color: white;
     text-align: center;
 }
@@ -481,7 +481,7 @@
     transition: all 0.3s ease;
     border: 2px solid transparent;
     background: white;
-    color: #667eea;
+    color: var(--primary-color);
     border-color: white;
 }
 

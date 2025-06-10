@@ -1,6 +1,6 @@
 /* General Navbar Styling */
 .navbar {
-    background-color: #333; /* Donkergrijs/Zwart thema */
+    background-color: var(--primary-color); /* Use custom primary color */
     height: 80px;
     display: flex;
     justify-content: center;
@@ -73,15 +73,15 @@
 
 .nav-links:hover {
     color: #ffffff;
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.4);
+    background: var(--secondary-color); /* Use secondary color for hover */
+    border-color: var(--secondary-color);
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .nav-links.active {
-    background: rgba(255, 255, 255, 0.25);
-    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--secondary-color); /* Use secondary color for active */
+    border-color: var(--secondary-color);
     color: #ffffff;
     font-weight: 600;
 }

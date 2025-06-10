@@ -1,6 +1,6 @@
 .storm-status-tracker {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
@@ -15,7 +15,7 @@
 
 .status-header h3 {
   margin: 0;
-  color: #495057;
+  color: var(--primary-color);
   font-size: 1.25rem;
 }
 
@@ -25,35 +25,37 @@
 }
 
 .connection-indicator.connected {
-  color: #28a745;
+  color: var(--tertiary-color);
 }
 
 .connection-indicator.disconnected {
-  color: #dc3545;
+  color: var(--quaternary-color);
 }
 
 .connection-indicator.completed {
-  color: #6c757d;
+  color: var(--text-muted);
 }
 
 .connection-error {
-  background: #f8d7da;
-  color: #721c24;
+  background: rgba(132, 105, 114, 0.1);
+  color: var(--quaternary-color);
   padding: 10px;
   border-radius: 4px;
   margin-bottom: 15px;
   font-size: 0.875rem;
+  border-left: 4px solid var(--quaternary-color);
 }
 
 .loading-history {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: rgba(59, 56, 80, 0.1);
+  color: var(--primary-color);
   padding: 10px;
   border-radius: 4px;
   margin-bottom: 15px;
   font-size: 0.875rem;
   display: flex;
   align-items: center;
+  border-left: 4px solid var(--primary-color);
 }
 
 .current-status {
@@ -78,12 +80,12 @@
 .phase-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #495057;
+  color: var(--primary-color);
 }
 
 .progress-bar {
   position: relative;
-  background: #e9ecef;
+  background: var(--border-color);
   border-radius: 4px;
   height: 24px;
   overflow: hidden;
@@ -91,7 +93,7 @@
 }
 
 .progress-fill {
-  background: linear-gradient(90deg, #007bff, #0056b3);
+  background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
   height: 100%;
   transition: width 0.3s ease;
   border-radius: 4px;
@@ -104,7 +106,7 @@
   transform: translate(-50%, -50%);
   font-size: 0.875rem;
   font-weight: 500;
-  color: #495057;
+  color: var(--text-dark);
   z-index: 1;
 }
 
@@ -116,32 +118,36 @@
 }
 
 .status-message.status-info {
-  background: #d1ecf1;
-  color: #0c5460;
-  border: 1px solid #bee5eb;
+  background: rgba(59, 56, 80, 0.1);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  border-left: 4px solid var(--primary-color);
 }
 
 .status-message.status-success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
+  background: rgba(137, 132, 157, 0.1);
+  color: var(--tertiary-color);
+  border: 1px solid var(--tertiary-color);
+  border-left: 4px solid var(--tertiary-color);
 }
 
 .status-message.status-warning {
-  background: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeaa7;
+  background: rgba(151, 75, 116, 0.1);
+  color: var(--secondary-color);
+  border: 1px solid var(--secondary-color);
+  border-left: 4px solid var(--secondary-color);
 }
 
 .status-message.status-error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background: rgba(132, 105, 114, 0.1);
+  color: var(--quaternary-color);
+  border: 1px solid var(--quaternary-color);
+  border-left: 4px solid var(--quaternary-color);
 }
 
 .status-details {
   background: #ffffff;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   padding: 15px;
   margin-bottom: 15px;
@@ -156,7 +162,7 @@
 }
 
 .detail-item strong {
-  color: #495057;
+  color: var(--primary-color);
 }
 
 .sources-list {
@@ -170,23 +176,24 @@
 }
 
 .sources-list a {
-  color: #007bff;
+  color: var(--primary-color);
   text-decoration: none;
   font-size: 0.875rem;
 }
 
 .sources-list a:hover {
+  color: var(--primary-hover);
   text-decoration: underline;
 }
 
 .updates-history {
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid var(--border-color);
   padding-top: 15px;
 }
 
 .updates-history h4 {
   font-size: 1rem;
-  color: #495057;
+  color: var(--primary-color);
   margin-bottom: 10px;
 }
 
@@ -307,14 +314,16 @@
 
 /* Research Questions Section */
 .research-questions-section {
-  border-top: 1px solid #dee2e6;
-  padding-top: 15px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
   margin-bottom: 20px;
 }
 
 .research-questions-section h4 {
-  font-size: 1.1rem;
-  color: #495057;
+  color: var(--primary-color);
+  font-size: 1.25rem;
   margin-bottom: 15px;
   font-weight: 600;
 }
@@ -326,64 +335,64 @@
 }
 
 .research-question-item {
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  padding: 12px;
-  border-left: 4px solid #007bff;
+  background: var(--light-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 15px;
+  border-left: 4px solid var(--secondary-color);
 }
 
 .question-time {
-  font-size: 0.8rem;
-  color: #6c757d;
-  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 5px;
   font-weight: 500;
 }
 
 .question-text {
-  font-size: 1rem;
-  color: #495057;
+  color: var(--text-dark);
+  font-size: 0.95rem;
   line-height: 1.4;
-  font-weight: 500;
+  margin: 0;
 }
 
 /* Progress Accordion */
 .progress-accordion {
-  border-top: 1px solid #dee2e6;
-  padding-top: 15px;
+  margin-top: 20px;
 }
 
 .progress-accordion details {
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 10px;
 }
 
 .progress-accordion summary {
-  background: #f8f9fa;
-  padding: 12px 15px;
+  padding: 15px;
   cursor: pointer;
-  user-select: none;
-  border-bottom: 1px solid #dee2e6;
-  transition: background-color 0.2s ease;
+  background: var(--light-color);
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .progress-accordion summary:hover {
-  background: #e9ecef;
+  background: rgba(59, 56, 80, 0.05);
 }
 
 .progress-accordion summary h4 {
   margin: 0;
-  font-size: 0.95rem;
-  color: #6c757d;
+  font-size: 1rem;
+  color: var(--primary-color);
   display: inline;
 }
 
 .progress-accordion .updates-list {
-  padding: 10px;
+  padding: 15px;
+  margin: 0;
   background: #ffffff;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 /* Responsive adjustments */

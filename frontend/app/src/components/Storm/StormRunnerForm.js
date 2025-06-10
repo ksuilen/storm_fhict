@@ -32,7 +32,7 @@ function StormRunnerForm({ onJobStarted, onJobError, onSubmitting }) {
     return (
         <form onSubmit={handleSubmit}>
             <div className="mb-3">
-                <label htmlFor="storm-topic" className="form-label">Onderwerp (Topic):</label>
+                <label htmlFor="storm-topic" className="form-label">Topic:</label>
                 <input 
                     type="text" 
                     className="form-control"
@@ -41,16 +41,27 @@ function StormRunnerForm({ onJobStarted, onJobError, onSubmitting }) {
                     onChange={(e) => setTopic(e.target.value)} 
                     required 
                     disabled={isLoading}
+                    placeholder="e.g. 'Machine learning in healthcare'"
                 />
+                <div className="form-text">
+                    💡 <strong>Tip:</strong> A STORM run takes approximately 2-3 minutes. Choose a specific but not too narrow topic for best results.
+                </div>
             </div>
             <button type="submit" className="btn btn-primary w-100" disabled={isLoading}>
                 {isLoading ? (
                     <>
                         <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span className="ms-1">Bezig met starten...</span>
+                        <span className="ms-1">Starting...</span>
                     </>
                 ) : 'Start Storm Run'}
             </button>
+            {isLoading && (
+                <div className="mt-2 text-center">
+                    <small className="text-muted">
+                        ⏱️ This process takes approximately 2-3 minutes. You can follow the progress live.
+                    </small>
+                </div>
+            )}
         </form>
     );
 }

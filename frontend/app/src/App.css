@@ -1,3 +1,75 @@
+/* Custom Color Scheme Variables */
+:root {
+  --primary-color: #3B3850;      /* Donker blauw/paars - hoofdkleur */
+  --secondary-color: #974B74;    /* Donker roze/paars - accent */
+  --tertiary-color: #89849D;     /* Grijsblauw - subtiele accent */
+  --quaternary-color: #846972;   /* Donker roze/bruin - warm accent */
+  --light-color: #F2EEF2;        /* Licht beige/wit - achtergrond */
+  
+  /* Derived colors for better UX */
+  --primary-hover: #2d2a3d;      /* Donkere versie van primary */
+  --secondary-hover: #7d3e60;    /* Donkere versie van secondary */
+  --light-gray: #f8f9fa;         /* Bootstrap light gray */
+  --border-color: #dee2e6;       /* Bootstrap border color */
+  --text-dark: #212529;          /* Bootstrap dark text */
+  --text-muted: #6c757d;         /* Bootstrap muted text */
+}
+
+/* Bootstrap Override - Primary Colors */
+.btn-primary {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+  background-color: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color) !important;
+  border-color: var(--secondary-color) !important;
+}
+
+.btn-secondary:hover,
+.btn-secondary:focus,
+.btn-secondary:active {
+  background-color: var(--secondary-hover) !important;
+  border-color: var(--secondary-hover) !important;
+}
+
+/* Bootstrap Override - Cards */
+.card {
+  border: 1px solid var(--border-color);
+  background-color: white;
+}
+
+.card-header {
+  background-color: var(--light-color);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-dark);
+}
+
+/* Bootstrap Override - Badges */
+.badge.bg-primary {
+  background-color: var(--primary-color) !important;
+}
+
+.badge.bg-secondary {
+  background-color: var(--secondary-color) !important;
+}
+
+/* Bootstrap Override - Links */
+a {
+  color: var(--primary-color);
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -5,8 +77,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f8f9fa; /* Light background for the entire page */
-  color: #333;
+  background-color: var(--light-color); /* Use custom light color */
+  color: var(--text-dark);
   height: 100%;
 }
 
@@ -93,7 +165,7 @@ nav button:hover {
 }
 
 h1, h2 {
-  color: #2c3e50;
+  color: var(--primary-color);
 }
 
 form div {
@@ -123,7 +195,7 @@ form input[type="checkbox"] {
 }
 
 form button[type="submit"] {
-  background-color: #3498db;
+  background-color: var(--primary-color);
   color: white;
   padding: 0.75rem 1.5rem;
   border: none;
@@ -134,25 +206,26 @@ form button[type="submit"] {
 }
 
 form button[type="submit"]:hover {
-  background-color: #2980b9;
+  background-color: var(--primary-hover);
 }
 
 form button[type="submit"]:disabled {
-  background-color: #bdc3c7;
+  background-color: var(--text-muted);
   cursor: not-allowed;
 }
 
 .error-message {
-  color: #e74c3c;
-  background-color: #fdd;
+  color: var(--quaternary-color);
+  background-color: rgba(132, 105, 114, 0.1);
   padding: 0.75rem;
-  border: 1px solid #e74c3c;
+  border: 1px solid var(--quaternary-color);
   border-radius: 4px;
   margin-bottom: 1rem;
+  border-left: 4px solid var(--quaternary-color);
 }
 
 .storm-results pre {
-  background-color: #f0f0f0;
+  background-color: var(--light-color);
   padding: 1rem;
   border-radius: 4px;
   white-space: pre-wrap; /* Wrap long lines */
@@ -160,6 +233,7 @@ form button[type="submit"]:disabled {
   text-align: left;
   max-height: 400px;
   overflow-y: auto;
+  border: 1px solid var(--border-color);
 }
 
 /* Layout specifiek voor App.js */
@@ -296,4 +370,219 @@ form button[type="submit"]:disabled {
   .main-content-container {
     width: 100%;
   }
+}
+
+/* Bootstrap Override - Forms */
+.form-control:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 0.2rem rgba(59, 56, 80, 0.25) !important;
+}
+
+.form-select:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 0.2rem rgba(59, 56, 80, 0.25) !important;
+}
+
+/* Bootstrap Override - Alerts */
+.alert-danger {
+  background-color: rgba(132, 105, 114, 0.1) !important;
+  border-color: var(--quaternary-color) !important;
+  color: var(--quaternary-color) !important;
+}
+
+.alert-success {
+  background-color: rgba(137, 132, 157, 0.1) !important;
+  border-color: var(--tertiary-color) !important;
+  color: var(--tertiary-color) !important;
+}
+
+.alert-info {
+  background-color: rgba(59, 56, 80, 0.1) !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+}
+
+/* Bootstrap Override - List Groups */
+.list-group-item.active {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+.list-group-item-action:hover {
+  background-color: var(--light-color) !important;
+}
+
+/* Bootstrap Override - Navbar (if using Bootstrap navbar) */
+.navbar-light .navbar-nav .nav-link {
+  color: var(--primary-color) !important;
+}
+
+.navbar-light .navbar-nav .nav-link:hover {
+  color: var(--primary-hover) !important;
+}
+
+.navbar-light .navbar-nav .nav-link.active {
+  color: var(--secondary-color) !important;
+}
+
+/* Bootstrap Override - Pagination */
+.page-link {
+  color: var(--primary-color) !important;
+}
+
+.page-link:hover {
+  color: var(--primary-hover) !important;
+  background-color: var(--light-color) !important;
+  border-color: var(--border-color) !important;
+}
+
+.page-item.active .page-link {
+  background-color: var(--primary-color) !important;
+  border-color: var(--primary-color) !important;
+}
+
+/* Bootstrap Override - Progress bars */
+.progress-bar {
+  background-color: var(--secondary-color) !important;
+}
+
+/* Bootstrap Override - Spinners */
+.spinner-border-primary {
+  color: var(--primary-color) !important;
+}
+
+.text-primary {
+  color: var(--primary-color) !important;
+}
+
+.text-secondary {
+  color: var(--secondary-color) !important;
+}
+
+.bg-primary {
+  background-color: var(--primary-color) !important;
+}
+
+.bg-secondary {
+  background-color: var(--secondary-color) !important;
+}
+
+.bg-light {
+  background-color: var(--light-color) !important;
+}
+
+.border-primary {
+  border-color: var(--primary-color) !important;
+}
+
+/* Bootstrap Override - Tables */
+.table {
+  color: var(--text-dark);
+}
+
+.table th {
+  background-color: var(--light-color);
+  color: var(--primary-color);
+  border-color: var(--border-color);
+  font-weight: 600;
+}
+
+.table td {
+  border-color: var(--border-color);
+}
+
+.table-striped > tbody > tr:nth-of-type(odd) > td {
+  background-color: rgba(242, 238, 242, 0.5);
+}
+
+.table-hover > tbody > tr:hover > td {
+  background-color: var(--light-color);
+}
+
+/* Bootstrap Override - Modals */
+.modal-header {
+  background-color: var(--light-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-title {
+  color: var(--primary-color);
+}
+
+.modal-footer {
+  border-top: 1px solid var(--border-color);
+}
+
+/* Bootstrap Override - Fieldsets */
+fieldset {
+  border-color: var(--border-color) !important;
+}
+
+fieldset legend {
+  color: var(--primary-color) !important;
+  font-weight: 600;
+}
+
+/* Bootstrap Override - Form Labels */
+.form-label {
+  color: var(--text-dark);
+  font-weight: 500;
+}
+
+/* Bootstrap Override - Form Text */
+.form-text {
+  color: var(--text-muted);
+}
+
+/* Bootstrap Override - Badges in tables */
+.badge.bg-info {
+  background-color: var(--tertiary-color) !important;
+}
+
+.badge.bg-success {
+  background-color: var(--tertiary-color) !important;
+}
+
+.badge.bg-danger {
+  background-color: var(--quaternary-color) !important;
+}
+
+/* Bootstrap Override - Containers */
+.container, .container-fluid {
+  background-color: transparent;
+}
+
+/* Custom styling for admin pages */
+.admin-page {
+  background-color: var(--light-color);
+  min-height: 100vh;
+}
+
+/* Custom styling for profile pages */
+.profile-page {
+  background-color: var(--light-color);
+}
+
+/* Bootstrap Override - Disabled states */
+.btn:disabled {
+  background-color: var(--text-muted) !important;
+  border-color: var(--text-muted) !important;
+  color: white !important;
+}
+
+/* Bootstrap Override - Form validation */
+.is-valid {
+  border-color: var(--tertiary-color) !important;
+}
+
+.is-invalid {
+  border-color: var(--quaternary-color) !important;
+}
+
+.valid-feedback {
+  color: var(--tertiary-color) !important;
+}
+
+.invalid-feedback {
+  color: var(--quaternary-color) !important;
 }

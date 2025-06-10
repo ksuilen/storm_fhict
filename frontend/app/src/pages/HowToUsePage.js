@@ -87,6 +87,9 @@ const HowToUsePage = () => {
                                     <div className="step-number">2</div>
                                     <h3>Start Research</h3>
                                     <p>Click "Start New Research" and watch STORM work its magic in real-time.</p>
+                                    <div className="alert alert-info small mb-2">
+                                        ⏱️ <strong>Takes 2-3 minutes</strong> - You can follow the progress live
+                                    </div>
                                     <div className="process-preview">
                                         <div className="process-step">🔍 Research Planning</div>
                                         <div className="process-step">🌐 Web Research</div>
@@ -126,6 +129,7 @@ const HowToUsePage = () => {
                                     <h3>Research Quality</h3>
                                     <p>Each STORM run:</p>
                                     <ul>
+                                        <li><strong>Duration:</strong> 2-3 minutes with live progress tracking</li>
                                         <li>Asks 8-15 research questions</li>
                                         <li>Consults 50-150 web sources</li>
                                         <li>Generates 1,000-3,000 word articles</li>

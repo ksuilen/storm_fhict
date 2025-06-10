@@ -1,10 +1,39 @@
-/* VoucherManagementPage.css - Greatly reduced as styles now primarily come from React-Bootstrap */
+/* VoucherManagementPage.css - Using consistent color scheme */
 
 /* 
   Retain any absolutely essential custom overrides or very specific styles here if needed. 
   For example, if you need a specific max-width for the main container on this page 
   that differs from typical Bootstrap container behavior, or very specific table cell adjustments.
 */
+
+/* Page-specific container style if needed */
+.voucher-management-container {
+    max-width: 1140px; 
+    margin: auto;
+    background-color: var(--light-color);
+}
+
+/* Custom styling for action buttons in table */
+.table td .btn-info {
+    background-color: var(--tertiary-color) !important;
+    border-color: var(--tertiary-color) !important;
+    margin-right: 0.5rem; 
+}
+
+.table td .btn-info:hover {
+    background-color: var(--quaternary-color) !important;
+    border-color: var(--quaternary-color) !important;
+}
+
+.table td .btn-danger {
+    background-color: var(--quaternary-color) !important;
+    border-color: var(--quaternary-color) !important;
+}
+
+.table td .btn-danger:hover {
+    background-color: #6d3a5a !important; /* Darker version of quaternary */
+    border-color: #6d3a5a !important;
+}
 
 /* Example of a page-specific container style if needed:
 .voucher-management-container {

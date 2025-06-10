@@ -3,11 +3,20 @@ import React from 'react';
 function Sidebar({ runHistory, onViewHistoryItem, onNewRun, selectedRunId }) {
     return (
         <div className="d-flex flex-column p-3 bg-light h-100"> {/* h-100 om de hoogte van parent te nemen */}
-            <button className="btn btn-primary mb-3 w-100" onClick={onNewRun}>
-                + Nieuwe Storm Run
+            <button 
+                className="btn btn-primary mb-3 w-100" 
+                onClick={onNewRun}
+                title="Start a new STORM run (takes 2-3 minutes)"
+            >
+                + New Storm Run
             </button>
+            <div className="mb-2">
+                <small className="text-muted">
+                    ⏱️ Runs take approximately 2-3 minutes
+                </small>
+            </div>
             <h6 className="sidebar-heading d-flex justify-content-between align-items-center px-1 mt-1 mb-1 text-muted">
-                <span>Run Geschiedenis</span>
+                <span>Run History</span>
             </h6>
             {runHistory.length > 0 ? (
                 <ul className="list-unstyled ps-0 mb-auto overflow-auto">
@@ -37,7 +46,7 @@ function Sidebar({ runHistory, onViewHistoryItem, onNewRun, selectedRunId }) {
                     ))}
                 </ul>
             ) : (
-                <p className="text-muted small px-1">Nog geen runs in de geschiedenis.</p>
+                <p className="text-muted small px-1">No runs in history yet.</p>
             )}
             {/* Je kunt hier later nog user info of settings link toevoegen */}
         </div>

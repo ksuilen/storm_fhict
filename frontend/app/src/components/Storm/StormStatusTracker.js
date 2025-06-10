@@ -264,6 +264,12 @@ const StormStatusTracker = ({ runId, isCompleted, onComplete, onError }) => {
         </div>
       </div>
 
+      {!isCompleted && (
+        <div className="status-message status-info">
+          ⏱️ <strong>Estimated duration:</strong> 2-3 minutes • You can follow the progress live
+        </div>
+      )}
+
       {connectionError && (
         <div className="connection-error">
           ⚠️ {connectionError}
