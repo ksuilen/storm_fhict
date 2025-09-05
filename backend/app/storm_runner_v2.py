@@ -74,43 +74,95 @@ def setup_litellm_fallback():
         kwargs['cache'] = None
         if 'cache' in kwargs:
             del kwargs['cache']
-        
+
+        # Always remove token-limit params so provider defaults apply
+        if 'max_tokens' in kwargs:
+            print("🔧 Removing max_tokens (use provider default)")
+            kwargs.pop('max_tokens', None)
+        if 'max_completion_tokens' in kwargs:
+            print("🔧 Removing max_completion_tokens (use provider default)")
+            kwargs.pop('max_completion_tokens', None)
+        # Remove top_p from all requests for maximum compatibility
+        if 'top_p' in kwargs:
+            print("🔧 Removing top_p (use provider default)")
+            kwargs.pop('top_p', None)
+
+        # --- Azure compatibility patch: proactively strip unsupported params ---
+        provider_hint = (kwargs.get('custom_llm_provider') or '').lower()
+        api_base      = (kwargs.get('api_base') or '').lower()
+        if 'azure' in provider_hint or 'azure' in api_base:
+            if kwargs.get('temperature', 1) != 1:
+                print("🔧 Azure: forcing temperature=1 (pre-call)")
+                kwargs['temperature'] = 1
+
         # Check for problematic parameter combinations that cause Azure AI conflicts
-        temp = kwargs.get('temperature', 1.0)
+        temp  = kwargs.get('temperature', 1.0)
         top_p = kwargs.get('top_p', 0.9)
-        
+
         # If temperature is 0 (greedy sampling) and top_p != 1.0, fix it preemptively
         if temp == 0.0 and top_p != 1.0:
-            print(f"🔧 Preemptively fixing DSPy parameters: temp=0.0 → temp=0.1, top_p={top_p} → top_p=1.0")
+            print("🔧 Preemptively fixing DSPy parameters: temp=0.0 → temp=0.1, top_p={top_p} → top_p=1.0")
             kwargs['temperature'] = 0.1  # Avoid temperature=0 conflicts
             kwargs['top_p'] = 1.0        # Safe for all providers
-        
-        # First attempt with current parameters (potentially fixed)
+
         try:
+            # First attempt with the (potentially patched) arguments
             print(f"🎯 LiteLLM call with parameters: temp={kwargs.get('temperature', 'default')}, top_p={kwargs.get('top_p', 'default')}")
             return original_completion(*args, **kwargs)
-            
+
         except Exception as e:
             error_msg = str(e).lower()
-            
-            # Check if it's the specific Azure AI parameter conflict
-            if "top_p must be 1 when using greedy sampling" in error_msg or ("top_p" in error_msg and "greedy" in error_msg):
-                print(f"⚠️  Parameter conflict detected: {e}")
-                print(f"🔄 Retrying with safe parameters (temp=0.1, top_p=1.0)")
-                
-                # Modify parameters for compatibility
+
+            # Debug log on error
+            print(f"⚠️ LiteLLM error captured in fallback wrapper: {error_msg}")
+
+            # Retry if Azure complains about max_tokens vs max_completion_tokens → drop both
+            if ("unsupported parameter" in error_msg and "max_tokens" in error_msg) or "use 'max_completion_tokens'" in error_msg:
+                print("⚠️ Provider rejected token-limit param. Retrying without any token-limit params.")
                 safe_kwargs = kwargs.copy()
-                safe_kwargs['temperature'] = 0.1  # Avoid temperature=0 conflicts
-                safe_kwargs['top_p'] = 1.0        # Safe for all providers
-                
+                safe_kwargs.pop('max_tokens', None)
+                safe_kwargs.pop('max_completion_tokens', None)
+                safe_kwargs.pop('top_p', None)
+                # Ensure temperature default for Azure safety
+                safe_kwargs['temperature'] = 1
+                print(f"🔄 Retry kwargs after token-limit removal: {safe_kwargs}")
                 try:
                     return original_completion(*args, **safe_kwargs)
                 except Exception as fallback_error:
                     print(f"❌ Fallback also failed: {fallback_error}")
                     raise fallback_error
-            else:
-                # For other errors, just re-raise
-                raise e
+
+            # Retry if Azure rejects the 'top_p' parameter entirely
+            if "unsupported parameter" in error_msg and "top_p" in error_msg:
+                print("⚠️ Provider rejected 'top_p'. Retrying without 'top_p'.")
+                safe_kwargs = kwargs.copy()
+                safe_kwargs.pop('top_p', None)
+                safe_kwargs.pop('max_tokens', None)
+                safe_kwargs.pop('max_completion_tokens', None)
+                print(f"🔄 Retry kwargs after top_p removal: {safe_kwargs}")
+                try:
+                    return original_completion(*args, **safe_kwargs)
+                except Exception as fallback_error:
+                    print(f"❌ Fallback also failed: {fallback_error}")
+                    raise fallback_error
+
+            # Retry if Azure complains about temperature unsupported
+            if "unsupported value" in error_msg and "temperature" in error_msg:
+                print("⚠️ Provider rejected temperature param. Retrying with default temperature=1 and without top_p.")
+                safe_kwargs = kwargs.copy()
+                safe_kwargs['temperature'] = 1
+                safe_kwargs.pop('top_p', None)
+                safe_kwargs.pop('max_tokens', None)
+                safe_kwargs.pop('max_completion_tokens', None)
+                print(f"🔄 Retry kwargs after temperature fix: {safe_kwargs}")
+                try:
+                    return original_completion(*args, **safe_kwargs)
+                except Exception as fallback_error:
+                    print(f"❌ Fallback also failed: {fallback_error}")
+                    raise fallback_error
+
+            # Otherwise, re-raise the original error
+            raise e
     
     # Replace the completion function
     litellm.completion = completion_with_fallback

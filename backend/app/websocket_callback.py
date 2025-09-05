@@ -337,6 +337,53 @@ class WebSocketCallbackHandler(BaseCallbackHandler):
         )
         self._save_progress_to_database()
 
+    # ------------------------------------------------------------------
+    # STORM Callback Overrides to emit finer-grained progress updates
+    # ------------------------------------------------------------------
+    def on_turn_policy_planning_start(self, **kwargs):
+        self.current_phase = "turn_planning"
+        self._send_update("info", "Turn policy planning started")
+
+    def on_expert_action_planning_start(self, **kwargs):
+        self.current_phase = "expert_action_planning"
+        self._send_update("info", "Expert action planning started")
+
+    def on_expert_action_planning_end(self, **kwargs):
+        self.progress += 5
+        self._send_update("info", "Expert action planning finished")
+
+    def on_expert_information_collection_start(self, **kwargs):
+        self.current_phase = "info_collection"
+        self._send_update("info", "Information collection started")
+
+    def on_expert_information_collection_end(self, info, **kwargs):
+        self.progress += 10
+        self._send_update("info", f"Information collection finished – collected {len(info)} items", {"items": len(info)})
+
+    def on_expert_utterance_generation_end(self, **kwargs):
+        self.progress += 10
+        self._send_update("info", "Expert utterance generation finished")
+
+    def on_expert_utterance_polishing_start(self, **kwargs):
+        self.current_phase = "utterance_polishing"
+        self._send_update("info", "Polishing expert utterances")
+
+    def on_mindmap_insert_start(self, **kwargs):
+        self.current_phase = "mindmap_insert"
+        self._send_update("info", "Inserting info into mind-map")
+
+    def on_mindmap_insert_end(self, **kwargs):
+        self.progress += 5
+        self._send_update("info", "Mind-map insert finished")
+
+    def on_mindmap_reorg_start(self, **kwargs):
+        self.current_phase = "mindmap_reorg"
+        self._send_update("info", "Re-organising mind-map")
+
+    def on_mindmap_reorg_end(self, **kwargs):
+        self.progress += 5
+        self._send_update("info", "Mind-map reorg finished")
+
 
 # Global WebSocket manager instance
 websocket_manager = WebSocketManager() 
