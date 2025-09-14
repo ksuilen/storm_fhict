@@ -5,8 +5,10 @@ import datetime
 # Shared properties
 class VoucherBase(BaseModel):
     prefix: Optional[str] = None
+    batch_label: Optional[str] = None
     max_runs: int
     is_active: Optional[bool] = True
+    expires_at: Optional[datetime.datetime] = None
 
 # Properties to receive on item creation
 class VoucherCreate(VoucherBase):
@@ -47,3 +49,12 @@ class VoucherDisplay(VoucherInDBBase):
     # def remaining_runs(self) -> int:
     #     return self.max_runs - self.used_runs
     # Voor nu doen we dit in de route/service laag. 
+
+
+class VoucherBatchCreate(BaseModel):
+    prefix: Optional[str] = None
+    batch_label: Optional[str] = None
+    count: int
+    max_runs: int
+    is_active: Optional[bool] = True
+    expires_at: Optional[datetime.datetime] = None

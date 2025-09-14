@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Optional, List, Union
 import json
 import shutil # Toegevoegd voor map verwijderen
 import logging
+from threading import Semaphore, Lock
 
 from .core.config import settings
 from .database import engine, Base, get_db
@@ -67,6 +68,11 @@ app.add_middleware(
     allow_methods=["*"],    
     allow_headers=["*"],    
 )
+
+# --- Simple in-process concurrency controls ---
+_global_run_semaphore: Semaphore = Semaphore(settings.STORM_MAX_CONCURRENT_RUNS)
+_voucher_active_counts: dict[int, int] = {}
+_voucher_counts_lock: Lock = Lock()
 
 # --- Startup Event --- (Beter dan direct aanroepen)
 @app.on_event("startup")
@@ -329,6 +335,14 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
     user_specific_output_segment = os.path.join(str(db_run.owner_id), str(db_run.id)) # Gebruik db_run voor owner_id en id
     absolute_output_dir_for_storm_runner = os.path.join(settings.STORM_OUTPUT_DIR, user_specific_output_segment)
     
+    # Acquire global slot before heavy processing
+    acquired_global = False
+    try:
+        _global_run_semaphore.acquire()
+        acquired_global = True
+    except Exception as _sem_exc:
+        print(f"Warning: failed to acquire global run slot for run {run_id}: {_sem_exc}")
+    
     try:
         os.makedirs(absolute_output_dir_for_storm_runner, exist_ok=True)
         db_run = crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.running, current_stage="SETUP_COMPLETE")
@@ -399,6 +413,20 @@ def run_storm_background(db: Session, run_id: int, topic: str, owner_type: str, 
             print(f"Error in Storm run {db_run.id} for owner {db_run.owner_type} {db_run.owner_id} (after runner init): {error_msg}\\nTraceback: {tb_str}")
             crud.update_storm_run_status(db=db, db_run=db_run, status=models.StormRunStatus.failed, error_message=f"Unexpected error: {error_msg} - See backend logs.")
         # Als de fout al was afgehandeld (zoals runner init failed), doe hier niets meer.
+    finally:
+        # Per-voucher active counter decrement
+        if owner_type == "voucher":
+            try:
+                _voucher_counts_lock.acquire()
+                current = _voucher_active_counts.get(owner_id, 0)
+                _voucher_active_counts[owner_id] = max(0, current - 1)
+                if _voucher_active_counts[owner_id] == 0:
+                    _voucher_active_counts.pop(owner_id, None)
+            finally:
+                _voucher_counts_lock.release()
+        # Release global slot
+        if acquired_global:
+            _global_run_semaphore.release()
 
 # --- Helper functie om een topic string naar een slug te converteren ---
 def create_topic_slug(topic: str) -> str:
@@ -536,7 +564,24 @@ async def create_storm_run_endpoint(
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid actor type for starting a run.")
 
-    new_run = crud.create_storm_run(db=db, run_in=storm_request, owner_type=owner_type, owner_id=owner_id)
+    # Enforce simple per-voucher concurrent cap
+    if owner_type == "voucher":
+        with _voucher_counts_lock:
+            current = _voucher_active_counts.get(owner_id, 0)
+            if current >= settings.STORM_MAX_CONCURRENT_RUNS_PER_VOUCHER:
+                raise HTTPException(status_code=429, detail="Too many concurrent runs for this voucher. Try again later.")
+            _voucher_active_counts[owner_id] = current + 1
+
+    try:
+        new_run = crud.create_storm_run(db=db, run_in=storm_request, owner_type=owner_type, owner_id=owner_id)
+    except Exception:
+        if owner_type == "voucher":
+            with _voucher_counts_lock:
+                current = _voucher_active_counts.get(owner_id, 0)
+                _voucher_active_counts[owner_id] = max(0, current - 1)
+                if _voucher_active_counts[owner_id] == 0:
+                    _voucher_active_counts.pop(owner_id, None)
+        raise
     
     # De run_storm_background functie verwacht nu owner_type en owner_id apart
     # en output_dir wordt intern in crud.create_storm_run gezet.

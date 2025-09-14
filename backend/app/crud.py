@@ -8,7 +8,7 @@ import re      # Voor slugify
 
 from . import models, schemas, security # security voor password hashing
 from .models import User, StormRun, Voucher, SystemConfiguration # Expliciet importeren
-from .schemas import UserCreate, UserUpdate, VoucherCreate, VoucherUpdate, StormRunCreate, StormRunUpdate, SystemConfigurationUpdate # etc.
+from .schemas import UserCreate, UserUpdate, VoucherCreate, VoucherUpdate, StormRunCreate, StormRunUpdate, SystemConfigurationUpdate, VoucherBatchCreate # etc.
 from .core.config import settings # Nodig voor STORM_OUTPUT_DIR
 
 # === User CRUD ===
@@ -113,14 +113,29 @@ def create_voucher(db: Session, *, voucher_in: VoucherCreate, admin_id: int | No
     db_voucher = models.Voucher(
         code=generated_code,
         prefix=voucher_in.prefix,
+        batch_label=getattr(voucher_in, 'batch_label', None),
         max_runs=voucher_in.max_runs,
         is_active=voucher_in.is_active if voucher_in.is_active is not None else True,
+        expires_at=getattr(voucher_in, 'expires_at', None),
         created_by_admin_id=admin_id
     )
     db.add(db_voucher)
     db.commit()
     db.refresh(db_voucher)
     return db_voucher
+
+
+def create_voucher_batch(db: Session, *, batch_in: VoucherBatchCreate, admin_id: int | None = None) -> list[Voucher]:
+    if batch_in.count <= 0:
+        raise ValueError("count must be > 0")
+    created: list[Voucher] = []
+    for _ in range(batch_in.count):
+        vc = VoucherCreate(prefix=batch_in.prefix, max_runs=batch_in.max_runs, is_active=batch_in.is_active)
+        # attach extra fields dynamically
+        setattr(vc, 'batch_label', batch_in.batch_label)
+        setattr(vc, 'expires_at', batch_in.expires_at)
+        created.append(create_voucher(db, voucher_in=vc, admin_id=admin_id))
+    return created
 
 def update_voucher(db: Session, *, db_voucher: Voucher, voucher_in: VoucherUpdate) -> Voucher:
     voucher_data = voucher_in.model_dump(exclude_unset=True)
@@ -154,6 +169,28 @@ def delete_voucher(db: Session, *, voucher_id: int) -> Voucher | None:
         db.delete(db_voucher)
         db.commit()
     return db_voucher
+
+def delete_vouchers_by_ids(db: Session, *, ids: list[int]) -> int:
+    if not ids:
+        return 0
+    deleted = (
+        db.query(models.Voucher)
+        .filter(models.Voucher.id.in_(ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return deleted
+
+def delete_vouchers_by_batch_label(db: Session, *, batch_label: str) -> int:
+    if not batch_label:
+        return 0
+    deleted = (
+        db.query(models.Voucher)
+        .filter(models.Voucher.batch_label == batch_label)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return deleted
 
 # === Statistics CRUD ===
 def get_voucher_statistics(db: Session, skip: int = 0, limit: int = 100) -> list[models.Voucher]:

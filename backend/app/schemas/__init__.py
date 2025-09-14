@@ -28,6 +28,7 @@ from .voucher import (
     VoucherInDBBase,
     Voucher,
     VoucherDisplay,
+    VoucherBatchCreate,
 )
 
 # Import from storm_run.py
@@ -95,6 +96,7 @@ __all__ = [
     "VoucherInDBBase",
     "Voucher",
     "VoucherDisplay",
+    "VoucherBatchCreate",
     # StormRun schemas
     "StormRunBase",
     "StormRunCreate",

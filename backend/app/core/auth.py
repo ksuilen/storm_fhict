@@ -104,6 +104,9 @@ async def get_current_actor(db: Session = Depends(get_db), token_payload: TokenD
         if voucher.used_runs >= voucher.max_runs:
             logger.warning(f"AUTH: get_current_actor - Voucher {voucher.code} has NO REMAINING RUNS.")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Voucher has no remaining runs")
+        if getattr(voucher, 'expires_at', None) is not None and voucher.expires_at < datetime.now(timezone.utc):
+            logger.warning(f"AUTH: get_current_actor - Voucher {voucher.code} is EXPIRED at {voucher.expires_at}.")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Voucher expired")
         logger.debug(f"AUTH: get_current_actor - Voucher {voucher.code} is VALID and ACTIVE for operations.")
         return voucher
     else:

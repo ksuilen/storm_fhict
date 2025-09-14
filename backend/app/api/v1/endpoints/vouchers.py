@@ -20,9 +20,28 @@ def create_voucher(
     """
     voucher = crud.create_voucher(db=db, voucher_in=voucher_in, admin_id=current_admin.id)
     # Bereken remaining_runs voor display
-    display_voucher = schemas.VoucherDisplay(**voucher.__dict__)
+    display_voucher = schemas.VoucherDisplay.model_validate(voucher)
     display_voucher.remaining_runs = voucher.max_runs - voucher.used_runs
     return display_voucher
+
+
+@router.post("/batch", response_model=List[schemas.VoucherDisplay], status_code=status.HTTP_201_CREATED)
+def create_voucher_batch(
+    *,
+    db: Session = Depends(get_db),
+    batch_in: schemas.VoucherBatchCreate,
+    current_admin: models.User = Depends(get_current_active_admin)
+) -> Any:
+    """
+    Create a batch of vouchers. (Admin only)
+    """
+    vouchers = crud.create_voucher_batch(db=db, batch_in=batch_in, admin_id=current_admin.id)
+    display_vouchers = []
+    for v in vouchers:
+        dv = schemas.VoucherDisplay.model_validate(v)
+        dv.remaining_runs = v.max_runs - v.used_runs
+        display_vouchers.append(dv)
+    return display_vouchers
 
 @router.get("/", response_model=List[schemas.VoucherDisplay])
 def read_vouchers(
@@ -37,7 +56,7 @@ def read_vouchers(
     vouchers = crud.get_all_vouchers(db, skip=skip, limit=limit)
     display_vouchers = []
     for v in vouchers:
-        dv = schemas.VoucherDisplay(**v.__dict__)
+        dv = schemas.VoucherDisplay.model_validate(v)
         dv.remaining_runs = v.max_runs - v.used_runs
         display_vouchers.append(dv)
     return display_vouchers
@@ -55,7 +74,7 @@ def read_voucher(
     voucher = crud.get_voucher(db, voucher_id=voucher_id)
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher not found")
-    display_voucher = schemas.VoucherDisplay(**voucher.__dict__)
+    display_voucher = schemas.VoucherDisplay.model_validate(voucher)
     display_voucher.remaining_runs = voucher.max_runs - voucher.used_runs
     return display_voucher
 
@@ -74,7 +93,7 @@ def update_voucher(
     if not db_voucher:
         raise HTTPException(status_code=404, detail="Voucher not found")
     voucher = crud.update_voucher(db=db, db_voucher=db_voucher, voucher_in=voucher_in)
-    display_voucher = schemas.VoucherDisplay(**voucher.__dict__)
+    display_voucher = schemas.VoucherDisplay.model_validate(voucher)
     display_voucher.remaining_runs = voucher.max_runs - voucher.used_runs
     return display_voucher
 
@@ -92,9 +111,39 @@ def delete_voucher(
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher not found")
     # Om consistent te zijn, return het object dat verwijderd is, of een confirmatie bericht
-    display_voucher = schemas.VoucherDisplay(**voucher.__dict__)
+    display_voucher = schemas.VoucherDisplay.model_validate(voucher)
     display_voucher.remaining_runs = voucher.max_runs - voucher.used_runs # Zal vaak max_runs zijn, of afh. van state
     return display_voucher
+
+@router.delete("/", response_model=schemas.Msg)
+def bulk_delete_vouchers_by_ids(
+    *,
+    db: Session = Depends(get_db),
+    ids: str,
+    current_admin: models.User = Depends(get_current_active_admin)
+) -> Any:
+    """
+    Bulk delete vouchers by comma-separated ids. (Admin only)
+    """
+    try:
+        id_list = [int(x) for x in ids.split(',') if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ids parameter")
+    deleted = crud.delete_vouchers_by_ids(db=db, ids=id_list)
+    return schemas.Msg(message=f"Deleted {deleted} vouchers")
+
+@router.delete("/by-batch/{batch_label}", response_model=schemas.Msg)
+def bulk_delete_vouchers_by_batch(
+    *,
+    db: Session = Depends(get_db),
+    batch_label: str,
+    current_admin: models.User = Depends(get_current_active_admin)
+) -> Any:
+    """
+    Bulk delete vouchers by batch_label. (Admin only)
+    """
+    deleted = crud.delete_vouchers_by_batch_label(db=db, batch_label=batch_label)
+    return schemas.Msg(message=f"Deleted {deleted} vouchers in batch '{batch_label}'")
 
 # Nieuwe endpoint voor voucher-houder om eigen details op te halen
 @router.get("/me/details", response_model=schemas.VoucherDisplay)

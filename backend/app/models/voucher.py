@@ -10,11 +10,13 @@ class Voucher(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String, unique=True, index=True, nullable=False)
     prefix = Column(String, nullable=True) # Door admin opgegeven, kan deel van 'code' zijn of apart
+    batch_label = Column(String, nullable=True) # Logische groepering/naam van de klas/batch
     
     max_runs = Column(Integer, nullable=False, default=1)
     used_runs = Column(Integer, nullable=False, default=0)
     
     is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
