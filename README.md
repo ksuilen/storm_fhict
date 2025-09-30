@@ -1,45 +1,64 @@
 # Storm WebApp
 
-**Storm (Self-driven Topic Outline and Research Model)** is a library that automates the process of knowledge generation for a given topic. It performs iterative research, outlines generation, and finally crafts an article with cited sources. This project, **Storm WebApp**, provides a user-friendly web interface built with FastAPI (backend) and React (frontend) to:
+A user-friendly web interface for [STORM](https://github.com/stanford-oval/storm) (Synthesis of Topic Outline through Retrieval and Multi-perspective question asking) - an LLM-powered knowledge curation system that researches topics and generates comprehensive reports with citations.
 
-*   Initiate and manage STORM research runs.
-*   Review generated outlines, articles, and cited sources.
-*   Provide user authentication and run history.
-*   Real-time progress tracking with WebSocket support.
-*   Research questions display and progress history.
+## About STORM
 
-This application aims to make the power of STORM accessible through an intuitive graphical interface, allowing users to easily explore topics and generate comprehensive reports.
+This project builds upon the excellent work by the Stanford OVAL Lab. STORM is a research system that automates knowledge generation by performing iterative research, outline generation, and article writing with proper citations.
+
+**Original STORM Project:**
+- 📄 Paper: [Assisting in Writing Wikipedia-like Articles From Scratch with Large Language Models](https://aclanthology.org/2024.naacl-long.347/) (NAACL 2024)
+- 🔬 Repository: [stanford-oval/storm](https://github.com/stanford-oval/storm)
+- 🌐 Demo: [storm.genie.stanford.edu](https://storm.genie.stanford.edu)
+
+## What This Web App Provides
+
+**Storm WebApp** wraps the STORM engine in a production-ready web application with:
+
+*   🔐 User authentication and authorization (JWT-based)
+*   🎫 Voucher system for controlled access and usage tracking
+*   📊 Admin panel for system configuration and user management
+*   📡 Real-time progress tracking via WebSocket connections
+*   📜 Complete run history with research questions and progress details
+*   🗑️ Run management (view, download, delete)
+*   🔧 Runtime model configuration (OpenAI, Azure, Portkey gateway support)
+*   🐳 Docker deployment with persistence
+*   ⚡ Concurrency controls for multi-user environments
+
+This application makes STORM's powerful research capabilities accessible through an intuitive graphical interface, suitable for educational institutions, research teams, and content creation workflows.
 
 ## Project Structure
 
--   `backend/`: Contains the FastAPI application.
-    -   `app/`: Core application code (main routes, schemas, CRUD operations, security, configuration, database models).
-    -   `storm_output/`: Default directory where STORM run outputs are stored (organized by user ID and run ID). This directory should be in your `.gitignore`.
-    -   `venv/`: Python virtual environment (should be in `.gitignore`).
-    -   `requirements.txt`: Python dependencies.
--   `frontend/`: Contains the React application (created with Create React App).
-    -   `app/`: Core application code.
-        -   `src/`: Source files (components, pages, services, context).
-        -   `public/`: Static assets.
-        -   `package.json`: Node.js dependencies and scripts.
--   `README.md`: This file.
--   `TODO.md`: List of pending tasks and future ideas.
--   `.gitignore`: Specifies intentionally untracked files that Git should ignore.
+-   `backend/`: FastAPI backend application
+    -   `app/`: Core application (API routes, schemas, CRUD, auth, config, models)
+    -   `external/storm/`: Integrated STORM library from Stanford OVAL
+    -   `alembic/`: Database migration scripts
+    -   `requirements.txt`: Python dependencies
+-   `frontend/app/`: React frontend application
+    -   `src/`: Source files (components, pages, services, contexts)
+    -   `public/`: Static assets
+    -   `package.json`: Node.js dependencies
+-   `docker-compose.yml`: Local development setup
+-   `docker-compose.prod.yml`: Production deployment with pre-built images
+-   `DEPLOYMENT.md`: Deployment guide for Docker and Portainer
 
-## Features
+## Key Features
 
--   User registration and JWT-based authentication.
--   Initiate new STORM runs based on a topic.
-*   Real-time progress tracking via WebSocket connections.
--   View history of past runs (topic, status, timestamp).
--   View details of completed runs:
-    -   Generated outline (`.txt`).
-    -   Generated article (`.txt`, displayed as Markdown).
-    -   Sources used (`url_to_info.json`).
-    -   Research questions and progress history.
--   Delete past runs (removes database entry and output files).
--   Admin panel for system configuration and model settings.
--   Support for multiple LLM providers via Portkey gateway.
+### Core Research Functionality (powered by STORM)
+- 🔬 Automated topic research with multi-perspective question asking
+- 📝 Hierarchical outline generation from gathered information
+- 📄 Full article writing with proper citations and sources
+- 🔍 Support for multiple retrieval backends (Tavily, Bing, You.com, etc.)
+
+### Web Application Features
+- 👤 **User Management**: JWT-based authentication, role-based access (admin/user)
+- 🎫 **Voucher System**: Bulk voucher creation, expiry dates, usage tracking
+- 📊 **Admin Dashboard**: System configuration, model settings, user statistics
+- 📡 **Real-time Updates**: WebSocket-based progress tracking during runs
+- 📚 **Run History**: Complete history with research questions and progress details
+- 💾 **Persistent Storage**: Docker volumes for database and generated content
+- 🔧 **Runtime Configuration**: Update LLM models and API keys without restart
+- ⚡ **Concurrency Control**: Configurable limits for simultaneous runs
 
 ## Model Configuration and Performance
 
@@ -325,17 +344,34 @@ Nadat je de multi-platform images naar je Docker registry hebt gepusht, kun je d
 ## Current Status
 
 ✅ **Working Features:**
-- Complete STORM research pipeline
-- Real-time progress tracking
-- Multi-provider LLM support via Portkey
-- User authentication and run history
-- Admin configuration panel
-- Docker deployment
+- Complete STORM research pipeline with all modules
+- Real-time progress tracking via WebSockets
+- Multi-provider LLM support (OpenAI, Azure, Portkey gateway)
+- User authentication and voucher system
+- Admin configuration panel with runtime model settings
+- Batch voucher creation with expiry dates
+- Docker deployment with automatic database migrations
+- Concurrency controls for multi-user environments
 
 ⚠️ **Known Limitations:**
-- Reasoning models (o1-preview, o1-mini) not supported
-- Mistral large models may have performance issues
-- No automatic timeout handling for hanging runs
-- Limited error recovery for failed API calls
+- Reasoning models (o1-preview, o1-mini) not fully supported by STORM
+- Some model-specific parameter conflicts may require fallback handling
+- SQLite database (single-instance deployment only)
+- In-process concurrency controls (not suitable for multi-replica deployments)
 
-See [TODO.md](TODO.md) for the current list of pending tasks and potential improvements.
+## Credits & License
+
+This project builds upon [STORM](https://github.com/stanford-oval/storm) by Stanford OVAL Lab, licensed under the MIT License.
+
+**STORM Citations:**
+```bibtex
+@inproceedings{shao-etal-2024-assisting,
+    title = "Assisting in Writing {W}ikipedia-like Articles From Scratch with Large Language Models",
+    author = "Shao, Yijia and Jiang, Yucheng and Kanell, Theodore and Xu, Peter and Khattab, Omar and Lam, Monica",
+    booktitle = "Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics",
+    year = "2024",
+    publisher = "Association for Computational Linguistics",
+}
+```
+
+**Storm WebApp** is also released under the MIT License. See [LICENSE](LICENSE) for details.
