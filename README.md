@@ -48,8 +48,8 @@ This application aims to make the power of STORM accessible through an intuitive
 The application works best with the following configuration:
 
 **✅ Recommended Models:**
-- **Small Model**: `mistral-small` or `gpt-3.5-turbo` - Fast and efficient for research questions and conversation simulation
-- **Large Model**: `gpt-4o` - Proven stable performance for outline generation, article writing, and polishing
+- **Small Model**: `gpt-4o-mini` or `gpt-3.5-turbo` - Fast and efficient for research questions and conversation simulation
+- **Large Model**: `gpt-4o` or `mistral-medium` - Proven stable performance for outline generation, article writing, and polishing
 
 **⚠️ Known Issues:**
 - **Mistral Large Models**: `mistral-large-2411` has known performance issues and may cause runs to hang during article generation phase. Use `gpt-4o` instead for large model tasks.
@@ -160,7 +160,7 @@ This project is configured to run with Docker Compose, which simplifies setup an
         1.  Look for these variables in a `.env` file located in the **project root directory** (same directory as `docker-compose.yml`). This is the recommended way to manage your keys for Dockerized development.
         2.  If not found in the root `.env` file, it looks for them in your host machine's environment variables.
         3.  If still not found, it defaults to an empty string (suppressing "variable not set" warnings from Docker Compose).
-    -   **Action:** Create a `.env` file in your project root (e.g., `/Users/koen/Development/storm_webapp/storm_webapp/.env`) and add your keys:
+    -   **Action:** Create a `.env` file in your project root (same directory as `docker-compose.yml`) and add your keys:
         ```env
         SECRET_KEY=your_strong_secret_key_here
         OPENAI_API_KEY=sk-your_openai_api_key
@@ -228,13 +228,13 @@ Docker `buildx` wordt gebruikt om deze multi-platform images te creëren en dire
 
 2.  **Bouw en push de backend image** (vervang `your-registry.com/your-repo/your-app-backend:latest`):
     ```bash
-    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/your-app-backend:latest --push ./backend
+    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/storm-backend:latest --push ./backend
     ```
     *Opmerking*: Als de `pip install` stap voor het `linux/amd64` platform lang duurt en faalt met een `ReadTimeoutError`, verhoog dan de timeout in `backend/Dockerfile` (bijv. `RUN pip install --timeout 600 --no-cache-dir -r requirements.txt`).
 
-3.  **Bouw en push de frontend image** (vervang `your-registry.com/your-repo/your-app-frontend:latest`):
+3.  **Bouw en push de frontend image** (vervang `your-registry.com/your-repo/storm-frontend:latest`):
     ```bash
-    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/your-app-frontend:latest --push ./frontend/app
+    docker buildx build --platform linux/amd64,linux/arm64 -t your-registry.com/your-repo/storm-frontend:latest --push ./frontend/app
     ```
 
 Nu zijn je images klaar in de registry voor de deployment.
@@ -252,19 +252,19 @@ Nadat je de multi-platform images naar je Docker registry hebt gepusht, kun je d
     ```yaml
     services:
       backend:
-        image: your-registry.com/your-repo/your-app-backend:latest # VERVANG DIT
+        image: your-registry.com/your-repo/storm-backend:latest # VERVANG DIT
         environment:
           - APP_ENV=docker
-          # VOORBEELD: SECRET_KEY=jouw_geheime_sleutel_hier
           # BELANGRIJK: Stel TAVILY_API_KEY, OPENAI_API_KEY, SECRET_KEY, etc.
           # in via de Portainer UI (Environment variables sectie van de stack).
+          # Of gebruik een stack.env file (zie DEPLOYMENT.md)
         volumes:
           - storm_db_data:/data/database # Zorgt voor persistentie van de database
           - storm_output_data:/data/storm_output # Zorgt voor persistentie van outputs
         restart: unless-stopped
 
       frontend:
-        image: your-registry.com/your-repo/your-app-frontend:latest # VERVANG DIT
+        image: your-registry.com/your-repo/storm-frontend:latest # VERVANG DIT
         ports:
           - "80:80" # HOST_PORT:CONTAINER_PORT (bijv. "3000:80" om op poort 3000 te draaien)
         depends_on:
